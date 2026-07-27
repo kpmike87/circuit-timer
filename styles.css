@@ -466,12 +466,14 @@ footer p {
 
   .timer-hint {
     position: absolute;
-    z-index: 2;
-    bottom: max(4.5rem, calc(env(safe-area-inset-bottom) + 4rem));
+    z-index: 4;
+    bottom: max(3.95rem, calc(env(safe-area-inset-bottom) + 3.7rem));
     left: 50%;
-    width: min(42vw, 22rem);
+    width: min(58vw, 28rem);
     margin: 0;
     font-size: 0.76rem;
+    font-weight: 750;
+    white-space: nowrap;
     transform: translateX(-50%);
   }
 
@@ -482,6 +484,7 @@ footer p {
     left: auto;
     width: min(35vw, 18rem);
     line-height: 1.2;
+    white-space: normal;
     transform: none;
   }
 
