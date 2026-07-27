@@ -229,7 +229,7 @@ function startWorkout() {
   state.currentRunStartedAt = Date.now();
   state.endTime = state.currentRunStartedAt + state.remainingMs;
 
-  startButton.textContent = "End workout";
+  startButton.textContent = "End Workout";
   pauseButton.disabled = false;
   pauseButton.textContent = "Pause";
   beginTicking();
@@ -247,7 +247,7 @@ function finishWorkout() {
   setPhase("complete");
   setInputsDisabled(false);
   startButton.disabled = false;
-  startButton.textContent = "Start workout";
+  startButton.textContent = "Start Workout";
   pauseButton.disabled = true;
   pauseButton.textContent = "Pause";
   releaseWakeLock();
@@ -302,7 +302,7 @@ function endWorkout() {
   setPhase("idle");
   setInputsDisabled(false);
   startButton.disabled = false;
-  startButton.textContent = "Start workout";
+  startButton.textContent = "Start Workout";
   pauseButton.disabled = true;
   pauseButton.textContent = "Pause";
   errorMessage.textContent = "";
