@@ -1,4 +1,4 @@
-const CACHE_NAME = "circuit-timer-v11";
+const CACHE_NAME = "circuit-timer-v12";
 const APP_FILES = [
   "./",
   "./index.html",

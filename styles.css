@@ -323,6 +323,20 @@ h1 {
   box-shadow: none;
 }
 
+.app[data-paused="true"] #startButton {
+  border-color: #df4b54;
+  color: white;
+  background: #bd2732;
+  box-shadow: 0 0.5rem 1.2rem rgba(189, 39, 50, 0.2);
+}
+
+.app[data-paused="true"] #pauseButton {
+  border-color: #25b971;
+  color: white;
+  background: #087a45;
+  box-shadow: 0 0.5rem 1.2rem rgba(8, 122, 69, 0.22);
+}
+
 button:focus-visible,
 input:focus-visible {
   outline: 3px solid white;
