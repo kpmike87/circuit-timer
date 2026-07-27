@@ -10,8 +10,10 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Total workout time remaining
 - Automatic completion when the selected total time is reached
 - Automatic continuous interval switching
+- Landscape-first workout layout with centered timer and compact settings
+- Black pause screen and clear in-progress status
 - Large WORK and REST displays with distinct colors
-- Pause, resume, and reset controls
+- Start/end and pause/resume controls
 - Screen wake lock when supported
 - Device-local saved settings
 - Installable and available offline as a Progressive Web App

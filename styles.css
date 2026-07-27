@@ -77,6 +77,10 @@ button {
   background-color: var(--rest);
 }
 
+.app[data-paused="true"] {
+  background: #000;
+}
+
 .topbar,
 .timer-card,
 .setup-card,
@@ -273,7 +277,7 @@ h1 {
 
 .controls {
   display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr;
+  grid-template-columns: 1.6fr 1fr;
   gap: 0.65rem;
 }
 
@@ -288,6 +292,11 @@ h1 {
   color: #122017;
   background: var(--accent);
   box-shadow: 0 0.65rem 1.5rem rgba(0, 0, 0, 0.16);
+}
+
+.primary-button:disabled {
+  color: #26362d;
+  opacity: 0.72;
 }
 
 .secondary-button {
@@ -347,26 +356,103 @@ footer p {
 
 @media (max-height: 42rem) and (orientation: landscape) {
   .app {
-    display: grid;
-    grid-template-columns: minmax(18rem, 1fr) minmax(18rem, 0.8fr);
-    grid-template-rows: auto 1fr auto;
-    column-gap: 1.5rem;
+    display: block;
+    padding: 0;
   }
 
   .topbar {
-    grid-column: 1 / -1;
+    position: absolute;
+    z-index: 3;
+    top: max(0.8rem, env(safe-area-inset-top));
+    left: max(1rem, env(safe-area-inset-left));
+    width: min(28vw, 13rem);
+    margin: 0;
+  }
+
+  .topbar h1 {
+    font-size: clamp(1.1rem, 3vw, 1.55rem);
   }
 
   .timer-card {
-    grid-row: 2 / 4;
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    width: 100%;
     min-height: 0;
+    margin: 0;
+    padding: 0 1rem 4.6rem;
+    pointer-events: none;
   }
 
-  .setup-card,
-  .controls,
-  .error-message,
-  footer {
-    grid-column: 2;
+  .countdown {
+    font-size: clamp(4.4rem, 22vh, 7.2rem);
+  }
+
+  .workout-progress {
+    width: min(22rem, 46vw);
+    margin-top: 0.7rem;
+    padding-block: 0.55rem;
+  }
+
+  .progress-metric strong {
+    font-size: clamp(1.45rem, 5vh, 2rem);
+  }
+
+  .timer-hint {
+    margin-top: 0.45rem;
+  }
+
+  .setup-card {
+    position: absolute;
+    z-index: 3;
+    top: max(0.75rem, env(safe-area-inset-top));
+    right: max(1rem, env(safe-area-inset-right));
+    width: min(42vw, 22rem);
+    margin: 0;
+    gap: 0.4rem;
+  }
+
+  .setup-card .input-group {
+    padding: 0.45rem 0.55rem;
+    border-radius: 0.72rem;
+  }
+
+  .setup-card .input-group label {
+    min-height: 0;
+    margin-bottom: 0.15rem;
+    font-size: 0.62rem;
+    white-space: nowrap;
+  }
+
+  .setup-card .input-shell input {
+    font-size: 1.2rem;
+  }
+
+  .setup-card .input-shell span {
+    font-size: 0.62rem;
+  }
+
+  .controls {
+    position: absolute;
+    z-index: 3;
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+    left: 50%;
+    width: min(64vw, 25rem);
+    margin: 0;
+    transform: translateX(-50%);
+  }
+
+  .controls button {
+    min-height: 3.1rem;
+  }
+
+  .error-message {
+    position: absolute;
+    z-index: 4;
+    top: 4.8rem;
+    right: max(1rem, env(safe-area-inset-right));
+    width: min(42vw, 22rem);
+    margin: 0;
   }
 
   footer {

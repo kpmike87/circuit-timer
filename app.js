@@ -9,7 +9,6 @@ const phaseLabel = document.querySelector("#phaseLabel");
 const timerHint = document.querySelector("#timerHint");
 const startButton = document.querySelector("#startButton");
 const pauseButton = document.querySelector("#pauseButton");
-const resetButton = document.querySelector("#resetButton");
 const errorMessage = document.querySelector("#errorMessage");
 const themeColor = document.querySelector('meta[name="theme-color"]');
 
@@ -18,6 +17,7 @@ const COLORS = {
   work: "#087a45",
   rest: "#a1262e",
   complete: "#111513",
+  paused: "#000000",
 };
 
 const state = {
@@ -221,6 +221,7 @@ function startWorkout() {
   setPhase("work");
   state.running = true;
   state.paused = false;
+  app.dataset.paused = "false";
   state.remainingMs = workSeconds * 1000;
   state.totalElapsedMs = 0;
   state.totalDurationMs = totalMinutes * 60 * 1000;
@@ -228,9 +229,8 @@ function startWorkout() {
   state.currentRunStartedAt = Date.now();
   state.endTime = state.currentRunStartedAt + state.remainingMs;
 
-  startButton.disabled = true;
+  startButton.textContent = "End workout";
   pauseButton.disabled = false;
-  resetButton.disabled = false;
   pauseButton.textContent = "Pause";
   beginTicking();
   requestWakeLock();
@@ -240,16 +240,16 @@ function finishWorkout() {
   clearInterval(state.intervalId);
   state.running = false;
   state.paused = false;
+  app.dataset.paused = "false";
   state.totalElapsedMs = state.totalDurationMs;
   state.totalBeforeCurrentRunMs = state.totalDurationMs;
   state.remainingMs = 0;
   setPhase("complete");
   setInputsDisabled(false);
   startButton.disabled = false;
-  startButton.textContent = "Start again";
+  startButton.textContent = "Start workout";
   pauseButton.disabled = true;
   pauseButton.textContent = "Pause";
-  resetButton.disabled = false;
   releaseWakeLock();
   updateDisplay();
 }
@@ -262,6 +262,8 @@ function pauseOrResume() {
     state.totalElapsedMs = state.totalBeforeCurrentRunMs;
     state.running = false;
     state.paused = true;
+    app.dataset.paused = "true";
+    themeColor.content = COLORS.paused;
     clearInterval(state.intervalId);
     pauseButton.textContent = "Resume";
     timerHint.textContent = "Paused";
@@ -275,6 +277,8 @@ function pauseOrResume() {
     state.endTime = state.currentRunStartedAt + state.remainingMs;
     state.running = true;
     state.paused = false;
+    app.dataset.paused = "false";
+    themeColor.content = COLORS[state.phase];
     pauseButton.textContent = "Pause";
     timerHint.textContent =
       state.phase === "work"
@@ -285,10 +289,11 @@ function pauseOrResume() {
   }
 }
 
-function resetWorkout() {
+function endWorkout() {
   clearInterval(state.intervalId);
   state.running = false;
   state.paused = false;
+  app.dataset.paused = "false";
   state.endTime = 0;
   state.remainingMs = Number(workInput.value) * 1000;
   state.totalElapsedMs = 0;
@@ -299,7 +304,6 @@ function resetWorkout() {
   startButton.disabled = false;
   startButton.textContent = "Start workout";
   pauseButton.disabled = true;
-  resetButton.disabled = true;
   pauseButton.textContent = "Pause";
   errorMessage.textContent = "";
   releaseWakeLock();
@@ -324,9 +328,14 @@ function previewTotalDuration() {
   }
 }
 
-startButton.addEventListener("click", startWorkout);
+startButton.addEventListener("click", () => {
+  if (state.running || state.paused) {
+    endWorkout();
+  } else {
+    startWorkout();
+  }
+});
 pauseButton.addEventListener("click", pauseOrResume);
-resetButton.addEventListener("click", resetWorkout);
 workInput.addEventListener("input", previewWorkTime);
 workInput.addEventListener("change", saveSettings);
 restInput.addEventListener("change", saveSettings);
