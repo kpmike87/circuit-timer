@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#111513" />
+    <meta name="description" content="A simple work and rest interval timer for circuit training." />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>Circuit Timer</title>
+  </head>
+  <body>
+    <main class="app" data-phase="idle">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">CIRCUIT TIMER</p>
+          <h1>Move. Recover. Repeat.</h1>
+        </div>
+      </header>
+
+      <section class="timer-card" aria-labelledby="phaseLabel">
+        <div class="phase-row">
+          <span class="status-dot" aria-hidden="true"></span>
+          <p class="phase-label" id="phaseLabel" aria-live="polite">READY</p>
+        </div>
+        <p class="countdown" id="countdown" aria-live="off">00:30</p>
+        <div class="workout-progress" aria-label="Workout time progress">
+          <div class="progress-metric">
+            <span>ELAPSED</span>
+            <strong id="totalTime">00:00</strong>
+          </div>
+          <div class="progress-divider" aria-hidden="true"></div>
+          <div class="progress-metric">
+            <span>REMAINING</span>
+            <strong id="remainingTotalTime">20:00</strong>
+          </div>
+        </div>
+        <p class="timer-hint" id="timerHint">Set your intervals, then press start.</p>
+      </section>
+
+      <section class="setup-card" id="setupCard" aria-label="Timer settings">
+        <div class="input-group">
+          <label for="workTime">Workout</label>
+          <div class="input-shell">
+            <input id="workTime" type="number" min="1" max="3600" step="1" value="30" inputmode="numeric" />
+            <span>sec</span>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="restTime">Rest</label>
+          <div class="input-shell">
+            <input id="restTime" type="number" min="1" max="3600" step="1" value="15" inputmode="numeric" />
+            <span>sec</span>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="totalDuration">Total workout</label>
+          <div class="input-shell">
+            <input id="totalDuration" type="number" min="1" max="180" step="1" value="20" inputmode="numeric" />
+            <span>min</span>
+          </div>
+        </div>
+      </section>
+
+      <p class="error-message" id="errorMessage" role="alert"></p>
+
+      <section class="controls" aria-label="Timer controls">
+        <button class="primary-button" id="startButton" type="button">Start workout</button>
+        <button class="secondary-button" id="pauseButton" type="button" disabled>Pause</button>
+        <button class="secondary-button" id="resetButton" type="button" disabled>Reset</button>
+      </section>
+
+      <footer>
+        <p>Alternates until your total workout time is complete.</p>
+      </footer>
+    </main>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

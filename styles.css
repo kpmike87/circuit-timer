@@ -1,0 +1,384 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter, ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --ink: #f5f7f6;
+  --muted: #aab4af;
+  --surface: rgba(255, 255, 255, 0.07);
+  --surface-border: rgba(255, 255, 255, 0.11);
+  --idle: #111513;
+  --work: #087a45;
+  --rest: #a1262e;
+  --accent: #dfffee;
+  background: var(--idle);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100dvh;
+  color: var(--ink);
+  background: var(--idle);
+  overscroll-behavior: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.app {
+  position: relative;
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  gap: 1.15rem;
+  padding:
+    max(1.25rem, env(safe-area-inset-top))
+    max(1.1rem, env(safe-area-inset-right))
+    max(1.1rem, env(safe-area-inset-bottom))
+    max(1.1rem, env(safe-area-inset-left));
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 78% 5%, rgba(255, 255, 255, 0.11), transparent 28rem),
+    var(--idle);
+  transition: background-color 450ms ease;
+}
+
+.app::before {
+  position: absolute;
+  inset: auto -6rem -10rem auto;
+  width: 21rem;
+  height: 21rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.app[data-phase="work"] {
+  background-color: var(--work);
+}
+
+.app[data-phase="rest"] {
+  background-color: var(--rest);
+}
+
+.topbar,
+.timer-card,
+.setup-card,
+.controls,
+footer,
+.error-message {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 38rem);
+  margin-inline: auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+h1 {
+  max-width: 14ch;
+  margin: 0;
+  font-size: clamp(1.45rem, 6vw, 2rem);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+
+.timer-card {
+  display: grid;
+  flex: 1;
+  min-height: 15rem;
+  place-content: center;
+  text-align: center;
+}
+
+.phase-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+}
+
+.status-dot {
+  width: 0.62rem;
+  height: 0.62rem;
+  border: 2px solid rgba(255, 255, 255, 0.72);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.app[data-phase="work"] .status-dot,
+.app[data-phase="rest"] .status-dot {
+  border-color: white;
+  background: white;
+  box-shadow: 0 0 0 0.34rem rgba(255, 255, 255, 0.14);
+}
+
+.phase-label {
+  margin: 0;
+  font-size: clamp(1rem, 4vw, 1.2rem);
+  font-weight: 900;
+  letter-spacing: 0.2em;
+}
+
+.countdown {
+  margin: 0.15rem 0 0;
+  font-size: clamp(5.4rem, 28vw, 10rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.075em;
+}
+
+.workout-progress {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  width: min(100%, 23rem);
+  margin: 1.2rem auto 0;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  color: #15201a;
+  background: white;
+  box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.18);
+}
+
+.progress-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.progress-metric span {
+  color: #5e6a64;
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.13em;
+}
+
+.progress-metric strong {
+  color: #111513;
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 850;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+
+.progress-divider {
+  width: 1px;
+  margin-inline: 0.9rem;
+  background: #d9dfdc;
+}
+
+.timer-hint {
+  margin: 0.8rem 0 0;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.92rem;
+}
+
+.setup-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.input-group {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: 1rem;
+  background: rgba(10, 15, 12, 0.27);
+  backdrop-filter: blur(12px);
+}
+
+.input-group label {
+  display: block;
+  min-height: 1.9em;
+  margin-bottom: 0.4rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.input-shell {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.input-shell input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: white;
+  background: transparent;
+  font-size: 1.65rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.input-shell span {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.input-group:focus-within {
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+}
+
+.input-group input:disabled {
+  opacity: 0.72;
+}
+
+.error-message {
+  min-height: 1.15rem;
+  margin-block: -0.5rem -0.55rem;
+  color: #ffe3e5;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.controls button {
+  min-height: 3.75rem;
+  border-radius: 1rem;
+  font-weight: 850;
+}
+
+.primary-button {
+  border: 0;
+  color: #122017;
+  background: var(--accent);
+  box-shadow: 0 0.65rem 1.5rem rgba(0, 0, 0, 0.16);
+}
+
+.secondary-button {
+  border: 1px solid var(--surface-border);
+  color: white;
+  background: rgba(10, 15, 12, 0.3);
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid white;
+  outline-offset: 3px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px) scale(0.99);
+}
+
+footer {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+footer p {
+  margin: 0;
+}
+
+@media (min-width: 42rem) {
+  .app {
+    padding-inline: 2rem;
+  }
+
+  .timer-card {
+    min-height: 20rem;
+  }
+}
+
+@media (max-width: 24rem) {
+  .setup-card {
+    gap: 0.5rem;
+  }
+
+  .input-group {
+    padding-inline: 0.7rem;
+  }
+
+  .input-shell input {
+    font-size: 1.4rem;
+  }
+}
+
+@media (max-height: 42rem) and (orientation: landscape) {
+  .app {
+    display: grid;
+    grid-template-columns: minmax(18rem, 1fr) minmax(18rem, 0.8fr);
+    grid-template-rows: auto 1fr auto;
+    column-gap: 1.5rem;
+  }
+
+  .topbar {
+    grid-column: 1 / -1;
+  }
+
+  .timer-card {
+    grid-row: 2 / 4;
+    min-height: 0;
+  }
+
+  .setup-card,
+  .controls,
+  .error-message,
+  footer {
+    grid-column: 2;
+  }
+
+  footer {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
