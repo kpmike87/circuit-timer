@@ -27,7 +27,7 @@ const state = {
   endTime: 0,
   remainingMs: 0,
   totalElapsedMs: 0,
-  totalDurationMs: 20 * 60 * 1000,
+  totalDurationMs: 21 * 60 * 1000,
   totalBeforeCurrentRunMs: 0,
   currentRunStartedAt: 0,
   intervalId: null,
@@ -43,9 +43,54 @@ function parseDuration(input) {
 
 function parseTotalDuration() {
   const minutes = Number(totalDurationInput.value);
-  return Number.isFinite(minutes) && minutes >= 1 && minutes <= 180
-    ? Math.round(minutes)
+  return Number.isInteger(minutes) && minutes >= 1 && minutes <= 180
+    ? minutes
     : null;
+}
+
+function greatestCommonDivisor(firstNumber, secondNumber) {
+  let first = firstNumber;
+  let second = secondNumber;
+
+  while (second !== 0) {
+    const remainder = first % second;
+    first = second;
+    second = remainder;
+  }
+
+  return first;
+}
+
+function getValidTotalMinuteStep(workSeconds, restSeconds) {
+  if (!workSeconds || !restSeconds) return 1;
+  const cycleSeconds = workSeconds + restSeconds;
+  return cycleSeconds / greatestCommonDivisor(cycleSeconds, 60);
+}
+
+function isTotalDurationCompatible(totalMinutes, workSeconds, restSeconds) {
+  return (totalMinutes * 60) % (workSeconds + restSeconds) === 0;
+}
+
+function normalizeTotalDuration() {
+  const workSeconds = parseDuration(workInput);
+  const restSeconds = parseDuration(restInput);
+  const validMinuteStep = getValidTotalMinuteStep(workSeconds, restSeconds);
+  const enteredMinutes = Number(totalDurationInput.value);
+  const requestedMinutes = Number.isFinite(enteredMinutes) ? enteredMinutes : validMinuteStep;
+  const largestValidValue = Math.floor(180 / validMinuteStep) * validMinuteStep;
+  const normalizedMinutes = Math.min(
+    largestValidValue,
+    Math.max(validMinuteStep, Math.round(requestedMinutes / validMinuteStep) * validMinuteStep),
+  );
+
+  totalDurationInput.min = String(validMinuteStep);
+  totalDurationInput.step = String(validMinuteStep);
+  totalDurationInput.value = String(normalizedMinutes);
+  syncSettingInputWidth(totalDurationInput);
+  state.totalDurationMs = normalizedMinutes * 60 * 1000;
+  updateDisplay();
+
+  return normalizedMinutes;
 }
 
 function syncSettingInputWidth(input) {
@@ -54,7 +99,8 @@ function syncSettingInputWidth(input) {
 }
 
 function getDurationMs(phase) {
-  return Number(phase === "work" ? workInput.value : restInput.value) * 1000;
+  const input = phase === "work" ? workInput : restInput;
+  return (parseDuration(input) || 0) * 1000;
 }
 
 function formatTime(milliseconds) {
@@ -75,7 +121,7 @@ function setPhase(phase) {
   themeColor.content = COLORS[phase];
 
   if (phase === "work") {
-    phaseLabel.textContent = "GO";
+    phaseLabel.textContent = "WORKOUT";
     timerHint.textContent = "Stay strong. Rest is next.";
   } else if (phase === "rest") {
     phaseLabel.textContent = "REST";
@@ -217,12 +263,18 @@ function beginTicking() {
 function startWorkout() {
   const workSeconds = parseDuration(workInput);
   const restSeconds = parseDuration(restInput);
-  const totalMinutes = parseTotalDuration();
 
-  if (!workSeconds || !restSeconds || !totalMinutes) {
-    errorMessage.textContent =
-      "Use 1–3,600 seconds for intervals and 1–180 minutes for total time.";
+  if (!workSeconds || !restSeconds) {
+    errorMessage.textContent = "Use 1-3,600 seconds for each interval.";
     return;
+  }
+
+  let totalMinutes = parseTotalDuration();
+  if (
+    !totalMinutes ||
+    !isTotalDurationCompatible(totalMinutes, workSeconds, restSeconds)
+  ) {
+    totalMinutes = normalizeTotalDuration();
   }
 
   errorMessage.textContent = "";
@@ -352,10 +404,19 @@ startButton.addEventListener("click", () => {
 });
 pauseButton.addEventListener("click", pauseOrResume);
 workInput.addEventListener("input", previewWorkTime);
-workInput.addEventListener("change", saveSettings);
-restInput.addEventListener("change", saveSettings);
 totalDurationInput.addEventListener("input", previewTotalDuration);
-totalDurationInput.addEventListener("change", saveSettings);
+workInput.addEventListener("change", () => {
+  normalizeTotalDuration();
+  saveSettings();
+});
+restInput.addEventListener("change", () => {
+  normalizeTotalDuration();
+  saveSettings();
+});
+totalDurationInput.addEventListener("change", () => {
+  normalizeTotalDuration();
+  saveSettings();
+});
 [workInput, restInput, totalDurationInput].forEach((input) => {
   input.addEventListener("input", () => syncSettingInputWidth(input));
 });
@@ -370,13 +431,14 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("beforeunload", releaseWakeLock);
 
 loadSettings();
+normalizeTotalDuration();
 [workInput, restInput, totalDurationInput].forEach(syncSettingInputWidth);
 state.remainingMs = (parseDuration(workInput) || 30) * 1000;
-state.totalDurationMs = (parseTotalDuration() || 20) * 60 * 1000;
+state.totalDurationMs = (parseTotalDuration() || 21) * 60 * 1000;
 updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=30").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=33").catch(() => {});
   });
 }
