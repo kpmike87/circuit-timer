@@ -439,8 +439,8 @@ footer p {
   }
 
   .countdown {
-    font-size: clamp(9rem, 50vh, 15rem);
-    line-height: 0.8;
+    font-size: clamp(8rem, 44vh, 13rem);
+    line-height: 0.84;
     letter-spacing: -0.08em;
     text-shadow: 0 5px 24px rgba(0, 0, 0, 0.28);
   }
