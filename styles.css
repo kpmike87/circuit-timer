@@ -209,6 +209,12 @@ h1 {
   font-size: 0.92rem;
 }
 
+.app[data-phase="idle"] .timer-hint {
+  color: rgba(255, 255, 255, 0.94);
+  font-weight: 850;
+  transform: translateY(0.75rem);
+}
+
 .setup-card {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -221,6 +227,11 @@ h1 {
   border-radius: 1rem;
   background: rgba(10, 15, 12, 0.27);
   backdrop-filter: blur(12px);
+}
+
+.app[data-phase="idle"] .input-group {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .input-group label {
@@ -303,10 +314,13 @@ h1 {
   opacity: 1;
 }
 
-.secondary-button {
+.secondary-button,
+.app[data-phase="work"] .primary-button,
+.app[data-phase="rest"] .primary-button {
   border: 1px solid var(--surface-border);
   color: white;
   background: rgba(10, 15, 12, 0.3);
+  box-shadow: none;
 }
 
 button:focus-visible,
@@ -428,6 +442,16 @@ footer p {
     font-size: 0.76rem;
   }
 
+  .app[data-phase="idle"] .timer-hint {
+    position: absolute;
+    top: max(0.75rem, env(safe-area-inset-top));
+    right: max(1rem, env(safe-area-inset-right));
+    width: min(35vw, 18rem);
+    margin: 0;
+    line-height: 1.2;
+    transform: none;
+  }
+
   .setup-card {
     position: absolute;
     z-index: 3;
@@ -436,6 +460,10 @@ footer p {
     width: min(35vw, 18rem);
     margin: 0;
     gap: 0.25rem;
+  }
+
+  .app[data-phase="idle"] .setup-card {
+    top: max(3.35rem, calc(env(safe-area-inset-top) + 3.1rem));
   }
 
   .setup-card .input-group {
