@@ -325,10 +325,10 @@ h1 {
 
 .app[data-paused="false"][data-phase="work"] #pauseButton,
 .app[data-paused="false"][data-phase="rest"] #pauseButton {
-  border-color: #909a95;
+  border-color: #b3bac0;
   color: white;
-  background: #606a65;
-  box-shadow: 0 0.45rem 1.1rem rgba(0, 0, 0, 0.2);
+  background: #7b8187;
+  box-shadow: 0 0.5rem 1.2rem rgba(0, 0, 0, 0.24);
 }
 
 .app[data-paused="true"] #startButton {
