@@ -216,6 +216,10 @@ h1 {
   font-weight: 850;
 }
 
+.app:not([data-phase="idle"]) .timer-hint {
+  display: none;
+}
+
 .setup-card {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
