@@ -155,12 +155,14 @@ h1 {
 }
 
 .countdown {
+  justify-self: center;
   margin: 0.15rem 0 0;
   font-size: clamp(5.4rem, 28vw, 10rem);
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   line-height: 0.95;
   letter-spacing: -0.075em;
+  text-align: center;
 }
 
 .workout-progress {

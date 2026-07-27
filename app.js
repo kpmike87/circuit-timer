@@ -54,6 +54,11 @@ function getDurationMs(phase) {
 
 function formatTime(milliseconds) {
   const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
@@ -363,6 +368,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=21").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=22").catch(() => {});
   });
 }
