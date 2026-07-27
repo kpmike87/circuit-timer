@@ -48,6 +48,11 @@ function parseTotalDuration() {
     : null;
 }
 
+function syncSettingInputWidth(input) {
+  const digits = Math.max(1, String(input.value || "").length);
+  input.style.setProperty("--input-width", `${digits}ch`);
+}
+
 function getDurationMs(phase) {
   return Number(phase === "work" ? workInput.value : restInput.value) * 1000;
 }
@@ -351,6 +356,9 @@ workInput.addEventListener("change", saveSettings);
 restInput.addEventListener("change", saveSettings);
 totalDurationInput.addEventListener("input", previewTotalDuration);
 totalDurationInput.addEventListener("change", saveSettings);
+[workInput, restInput, totalDurationInput].forEach((input) => {
+  input.addEventListener("input", () => syncSettingInputWidth(input));
+});
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && state.running) {
@@ -362,12 +370,13 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("beforeunload", releaseWakeLock);
 
 loadSettings();
+[workInput, restInput, totalDurationInput].forEach(syncSettingInputWidth);
 state.remainingMs = (parseDuration(workInput) || 30) * 1000;
 state.totalDurationMs = (parseTotalDuration() || 20) * 60 * 1000;
 updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=25").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=26").catch(() => {});
   });
 }
