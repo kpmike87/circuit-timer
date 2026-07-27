@@ -12,6 +12,7 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Automatic continuous interval switching
 - Landscape-first workout layout with centered timer and compact settings
 - Black pause screen and clear in-progress status
+- End Workout is available only while paused
 - Large WORK and REST displays with distinct colors
 - Start/end and pause/resume controls
 - Screen wake lock when supported

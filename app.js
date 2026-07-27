@@ -229,7 +229,8 @@ function startWorkout() {
   state.currentRunStartedAt = Date.now();
   state.endTime = state.currentRunStartedAt + state.remainingMs;
 
-  startButton.textContent = "End Workout";
+  startButton.disabled = true;
+  startButton.textContent = "Workout in Progress";
   pauseButton.disabled = false;
   pauseButton.textContent = "Pause";
   beginTicking();
@@ -265,6 +266,8 @@ function pauseOrResume() {
     app.dataset.paused = "true";
     themeColor.content = COLORS.paused;
     clearInterval(state.intervalId);
+    startButton.disabled = false;
+    startButton.textContent = "End Workout";
     pauseButton.textContent = "Resume";
     timerHint.textContent = "Paused";
     releaseWakeLock();
@@ -279,6 +282,8 @@ function pauseOrResume() {
     state.paused = false;
     app.dataset.paused = "false";
     themeColor.content = COLORS[state.phase];
+    startButton.disabled = true;
+    startButton.textContent = "Workout in Progress";
     pauseButton.textContent = "Pause";
     timerHint.textContent =
       state.phase === "work"
@@ -329,9 +334,9 @@ function previewTotalDuration() {
 }
 
 startButton.addEventListener("click", () => {
-  if (state.running || state.paused) {
+  if (state.paused) {
     endWorkout();
-  } else {
+  } else if (!state.running) {
     startWorkout();
   }
 });
