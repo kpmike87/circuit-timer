@@ -83,6 +83,7 @@ button {
 
 .topbar,
 .timer-card,
+.timer-hint,
 .setup-card,
 .controls,
 footer,
@@ -204,15 +205,15 @@ h1 {
 }
 
 .timer-hint {
-  margin: 0.8rem 0 0;
+  margin: -0.2rem auto 0;
   color: rgba(255, 255, 255, 0.74);
   font-size: 0.92rem;
+  text-align: center;
 }
 
 .app[data-phase="idle"] .timer-hint {
   color: rgba(255, 255, 255, 0.94);
   font-weight: 850;
-  transform: translateY(0.75rem);
 }
 
 .setup-card {
@@ -241,16 +242,18 @@ h1 {
   color: rgba(255, 255, 255, 0.72);
   font-size: 0.75rem;
   font-weight: 750;
+  text-align: center;
 }
 
 .input-shell {
   display: flex;
   align-items: baseline;
+  justify-content: center;
   gap: 0.35rem;
 }
 
 .input-shell input {
-  width: 100%;
+  width: 4.5ch;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -260,6 +263,7 @@ h1 {
   font-size: 1.65rem;
   font-variant-numeric: tabular-nums;
   font-weight: 800;
+  text-align: center;
 }
 
 .input-shell span {
@@ -435,8 +439,9 @@ footer p {
   }
 
   .countdown {
-    font-size: clamp(6rem, 34vh, 10rem);
-    line-height: 0.86;
+    font-size: clamp(12rem, 68vh, 20rem);
+    line-height: 0.72;
+    letter-spacing: -0.09em;
     text-shadow: 0 5px 24px rgba(0, 0, 0, 0.28);
   }
 
@@ -460,16 +465,22 @@ footer p {
   }
 
   .timer-hint {
-    margin-top: 0.35rem;
+    position: absolute;
+    z-index: 2;
+    bottom: max(4.5rem, calc(env(safe-area-inset-bottom) + 4rem));
+    left: 50%;
+    width: min(42vw, 22rem);
+    margin: 0;
     font-size: 0.76rem;
+    transform: translateX(-50%);
   }
 
   .app[data-phase="idle"] .timer-hint {
-    position: absolute;
     top: max(0.75rem, env(safe-area-inset-top));
     right: max(1rem, env(safe-area-inset-right));
+    bottom: auto;
+    left: auto;
     width: min(35vw, 18rem);
-    margin: 0;
     line-height: 1.2;
     transform: none;
   }
