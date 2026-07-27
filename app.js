@@ -56,7 +56,7 @@ function formatTime(milliseconds) {
   const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
 
   if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
+    return `:${String(totalSeconds).padStart(2, "0")}`;
   }
 
   const minutes = Math.floor(totalSeconds / 60);
@@ -368,6 +368,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=22").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=23").catch(() => {});
   });
 }
