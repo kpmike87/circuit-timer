@@ -185,10 +185,10 @@ h1 {
 }
 
 .progress-metric span {
-  color: #5e6a64;
-  font-size: 0.66rem;
-  font-weight: 850;
-  letter-spacing: 0.13em;
+  color: #2f3b35;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.11em;
 }
 
 .progress-metric strong {
@@ -470,7 +470,7 @@ footer p {
   }
 
   .progress-metric span {
-    font-size: 0.55rem;
+    font-size: 0.62rem;
   }
 
   .progress-divider {

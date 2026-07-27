@@ -75,7 +75,7 @@ function setPhase(phase) {
   themeColor.content = COLORS[phase];
 
   if (phase === "work") {
-    phaseLabel.textContent = "WORK";
+    phaseLabel.textContent = "GO";
     timerHint.textContent = "Stay strong. Rest is next.";
   } else if (phase === "rest") {
     phaseLabel.textContent = "REST";
@@ -377,6 +377,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=28").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=30").catch(() => {});
   });
 }
