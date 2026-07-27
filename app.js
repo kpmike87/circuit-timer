@@ -363,6 +363,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=19").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=20").catch(() => {});
   });
 }

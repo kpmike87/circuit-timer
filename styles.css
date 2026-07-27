@@ -467,7 +467,7 @@ footer p {
   .timer-hint {
     position: absolute;
     z-index: 4;
-    bottom: max(3.95rem, calc(env(safe-area-inset-bottom) + 3.7rem));
+    bottom: max(3.72rem, calc(env(safe-area-inset-bottom) + 3.5rem));
     left: 50%;
     width: min(58vw, 28rem);
     margin: 0;
