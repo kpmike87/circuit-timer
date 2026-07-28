@@ -414,7 +414,7 @@ function showWorkoutSummary() {
 function returnToReady() {
   app.dataset.view = "timer";
   state.endTime = 0;
-  state.remainingMs = (parseDuration(workInput) || 30) * 1000;
+  state.remainingMs = (parseDuration(workInput) || 0) * 1000;
   state.totalElapsedMs = 0;
   state.totalBeforeCurrentRunMs = 0;
   state.currentRunStartedAt = 0;
@@ -431,13 +431,13 @@ function returnToReady() {
 function resetReadyTimers() {
   if (state.phase !== "idle" || state.running || state.paused) return;
 
-  workInput.value = "30";
-  restInput.value = "15";
-  totalDurationInput.value = "21";
-  normalizeTotalDuration();
+  workInput.value = "0";
+  restInput.value = "0";
+  totalDurationInput.value = "0";
   [workInput, restInput, totalDurationInput].forEach(syncSettingInputWidth);
-  state.remainingMs = 30 * 1000;
+  state.remainingMs = 0;
   state.totalElapsedMs = 0;
+  state.totalDurationMs = 0;
   state.totalBeforeCurrentRunMs = 0;
   state.currentRunStartedAt = 0;
   state.endTime = 0;
@@ -452,6 +452,9 @@ function previewWorkTime() {
   if (seconds) {
     state.remainingMs = seconds * 1000;
     updateDisplay();
+  } else if (Number(workInput.value) === 0) {
+    state.remainingMs = 0;
+    updateDisplay();
   }
 }
 
@@ -460,6 +463,9 @@ function previewTotalDuration() {
   const minutes = parseTotalDuration();
   if (minutes) {
     state.totalDurationMs = minutes * 60 * 1000;
+    updateDisplay();
+  } else if (Number(totalDurationInput.value) === 0) {
+    state.totalDurationMs = 0;
     updateDisplay();
   }
 }
@@ -507,14 +513,18 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("beforeunload", releaseWakeLock);
 
 loadSettings();
-normalizeTotalDuration();
+const settingsAreCleared =
+  Number(workInput.value) === 0 &&
+  Number(restInput.value) === 0 &&
+  Number(totalDurationInput.value) === 0;
+if (!settingsAreCleared) normalizeTotalDuration();
 [workInput, restInput, totalDurationInput].forEach(syncSettingInputWidth);
-state.remainingMs = (parseDuration(workInput) || 30) * 1000;
-state.totalDurationMs = (parseTotalDuration() || 21) * 60 * 1000;
+state.remainingMs = (parseDuration(workInput) || 0) * 1000;
+state.totalDurationMs = (parseTotalDuration() || 0) * 60 * 1000;
 updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=48").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=49").catch(() => {});
   });
 }
