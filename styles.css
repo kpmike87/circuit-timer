@@ -282,7 +282,7 @@ h1 {
 
 .input-shell span {
   color: rgba(255, 255, 255, 0.58);
-  font-size: 0.78rem;
+  font-size: 0.92rem;
   font-weight: 700;
 }
 
@@ -735,7 +735,7 @@ footer p {
   }
 
   .setup-card .input-shell span {
-    font-size: 0.52rem;
+    font-size: 0.68rem;
   }
 
   .controls {
