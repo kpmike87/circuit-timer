@@ -10,6 +10,12 @@ const timerHint = document.querySelector("#timerHint");
 const startButton = document.querySelector("#startButton");
 const pauseButton = document.querySelector("#pauseButton");
 const errorMessage = document.querySelector("#errorMessage");
+const summaryTitle = document.querySelector("#summaryTitle");
+const summaryTotalTime = document.querySelector("#summaryTotalTime");
+const summaryWorkoutTime = document.querySelector("#summaryWorkoutTime");
+const summaryRestTime = document.querySelector("#summaryRestTime");
+const summaryRounds = document.querySelector("#summaryRounds");
+const readyButton = document.querySelector("#readyButton");
 const themeColor = document.querySelector('meta[name="theme-color"]');
 
 const COLORS = {
@@ -361,8 +367,36 @@ function endWorkout() {
   state.running = false;
   state.paused = false;
   app.dataset.paused = "false";
+  setInputsDisabled(false);
+  showWorkoutSummary();
+  releaseWakeLock();
+}
+
+function showWorkoutSummary() {
+  const totalSeconds = Math.max(0, Math.floor(state.totalElapsedMs / 1000));
+  const workSeconds = parseDuration(workInput) || 0;
+  const restSeconds = parseDuration(restInput) || 0;
+  const cycleSeconds = workSeconds + restSeconds;
+  const completedRounds = cycleSeconds > 0 ? Math.floor(totalSeconds / cycleSeconds) : 0;
+  const secondsIntoCurrentRound = cycleSeconds > 0 ? totalSeconds % cycleSeconds : 0;
+  const totalWorkoutSeconds =
+    completedRounds * workSeconds + Math.min(secondsIntoCurrentRound, workSeconds);
+  const totalRestSeconds = Math.max(0, totalSeconds - totalWorkoutSeconds);
+
+  summaryTotalTime.textContent = formatElapsedTime(totalSeconds * 1000);
+  summaryWorkoutTime.textContent = formatElapsedTime(totalWorkoutSeconds * 1000);
+  summaryRestTime.textContent = formatElapsedTime(totalRestSeconds * 1000);
+  summaryRounds.textContent = String(completedRounds);
+  app.dataset.view = "summary";
+  setPhase("complete");
+  document.title = "Workout Summary - Circuit Timer";
+  window.requestAnimationFrame(() => summaryTitle.focus());
+}
+
+function returnToReady() {
+  app.dataset.view = "timer";
   state.endTime = 0;
-  state.remainingMs = Number(workInput.value) * 1000;
+  state.remainingMs = (parseDuration(workInput) || 30) * 1000;
   state.totalElapsedMs = 0;
   state.totalBeforeCurrentRunMs = 0;
   state.currentRunStartedAt = 0;
@@ -373,7 +407,6 @@ function endWorkout() {
   pauseButton.disabled = true;
   pauseButton.textContent = "Pause";
   errorMessage.textContent = "";
-  releaseWakeLock();
   updateDisplay();
 }
 
@@ -403,6 +436,7 @@ startButton.addEventListener("click", () => {
   }
 });
 pauseButton.addEventListener("click", pauseOrResume);
+readyButton.addEventListener("click", returnToReady);
 workInput.addEventListener("input", previewWorkTime);
 totalDurationInput.addEventListener("input", previewTotalDuration);
 workInput.addEventListener("change", () => {
@@ -439,6 +473,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=33").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=35").catch(() => {});
   });
 }

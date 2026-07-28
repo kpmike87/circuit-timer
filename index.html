@@ -8,11 +8,11 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=33" />
+    <link rel="stylesheet" href="./styles.css?v=35" />
     <title>Circuit Timer</title>
   </head>
   <body>
-    <main class="app" data-phase="idle" data-paused="false">
+    <main class="app" data-phase="idle" data-paused="false" data-view="timer">
       <header class="topbar">
         <div>
           <p class="eyebrow">CIRCUIT TIMER</p>
@@ -77,8 +77,38 @@
       <footer>
         <p>Alternates until your total workout time is complete.</p>
       </footer>
+
+      <section class="summary-screen" id="summaryScreen" aria-labelledby="summaryTitle">
+        <div class="summary-heading">
+          <p class="eyebrow">WORKOUT SUMMARY</p>
+          <h2 id="summaryTitle" tabindex="-1">Nice work.</h2>
+          <p>Your session highlights are below.</p>
+        </div>
+
+        <div class="summary-highlight">
+          <span>Total Time</span>
+          <strong id="summaryTotalTime">00:00</strong>
+        </div>
+
+        <div class="summary-stats" aria-label="Workout statistics">
+          <article class="summary-stat">
+            <span>Workout Time</span>
+            <strong id="summaryWorkoutTime">00:00</strong>
+          </article>
+          <article class="summary-stat">
+            <span>Rest Time</span>
+            <strong id="summaryRestTime">00:00</strong>
+          </article>
+          <article class="summary-stat">
+            <span>Rounds Completed</span>
+            <strong id="summaryRounds">0</strong>
+          </article>
+        </div>
+
+        <button class="summary-ready-button" id="readyButton" type="button">Back to Ready</button>
+      </section>
     </main>
 
-    <script src="./app.js?v=33" defer></script>
+    <script src="./app.js?v=35" defer></script>
   </body>
 </html>
