@@ -10,7 +10,8 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Total workout time remaining
 - Automatic completion when the selected total time is reached
 - Automatic continuous interval switching
-- Landscape-first workout layout with centered timer and compact settings
+- Balanced landscape Ready screen with the timer on the left and settings on the right
+- Centered landscape timer during active workouts with compact settings
 - Black pause screen and clear in-progress status
 - End Workout is available only while paused
 - Large WORKOUT and REST displays with distinct colors

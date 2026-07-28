@@ -247,7 +247,7 @@ h1 {
   min-height: 1.9em;
   margin-bottom: 0.4rem;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 0.86rem;
+  font-size: 1rem;
   font-weight: 900;
   text-align: left;
 }
@@ -712,7 +712,7 @@ footer p {
   .setup-card .input-group label {
     min-height: 0;
     margin-bottom: 0.08rem;
-    font-size: 0.64rem;
+    font-size: 0.72rem;
     font-weight: 900;
     white-space: nowrap;
   }
@@ -752,6 +752,48 @@ footer p {
     right: max(1rem, env(safe-area-inset-right));
     width: min(35vw, 18rem);
     margin: 0;
+  }
+
+  .app[data-phase="idle"][data-view="timer"] .timer-card {
+    inset: 0 auto 0 0;
+    width: 56vw;
+    padding: 4.8rem 1.25rem 1rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.06);
+  }
+
+  .app[data-phase="idle"][data-view="timer"] .timer-hint,
+  .app[data-phase="idle"][data-view="timer"] .setup-card,
+  .app[data-phase="idle"][data-view="timer"] .controls,
+  .app[data-phase="idle"][data-view="timer"] .error-message {
+    right: max(1rem, env(safe-area-inset-right));
+    left: auto;
+    width: min(41vw, 23rem);
+    transform: none;
+  }
+
+  .app[data-phase="idle"][data-view="timer"] .timer-hint {
+    top: max(1rem, env(safe-area-inset-top));
+    text-align: center;
+  }
+
+  .app[data-phase="idle"][data-view="timer"] .setup-card {
+    top: 50%;
+    gap: 0.5rem;
+    transform: translateY(-50%);
+  }
+
+  .app[data-phase="idle"][data-view="timer"] .setup-card .input-group {
+    padding: 0.5rem 0.35rem;
+  }
+
+  .app[data-phase="idle"][data-view="timer"] .controls {
+    bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .app[data-phase="idle"][data-view="timer"] .error-message {
+    top: auto;
+    bottom: max(4.75rem, calc(env(safe-area-inset-bottom) + 4.5rem));
   }
 
   footer {
