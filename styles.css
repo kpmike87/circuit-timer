@@ -774,7 +774,7 @@ footer p {
 
   .app[data-phase="idle"][data-view="timer"] .timer-hint {
     top: auto;
-    bottom: max(4.85rem, calc(env(safe-area-inset-bottom) + 4.6rem));
+    bottom: max(5.75rem, calc(env(safe-area-inset-bottom) + 5.5rem));
     text-align: center;
   }
 
@@ -794,7 +794,7 @@ footer p {
 
   .app[data-phase="idle"][data-view="timer"] .error-message {
     top: auto;
-    bottom: max(6.75rem, calc(env(safe-area-inset-bottom) + 6.5rem));
+    bottom: max(7.75rem, calc(env(safe-area-inset-bottom) + 7.5rem));
   }
 
   footer {
