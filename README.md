@@ -20,6 +20,7 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Summary feedback scales from playfully harsh to highly enthusiastic based on completion percentage
 - Back to Ready returns to the timer setup
 - Start/end and pause/resume controls
+- Ready-screen Reset restores the default intervals and clears timer progress
 - Screen wake lock when supported
 - Device-local saved settings
 - Installable and available offline as a Progressive Web App

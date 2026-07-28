@@ -422,9 +422,27 @@ function returnToReady() {
   setInputsDisabled(false);
   startButton.disabled = false;
   startButton.textContent = "Start Workout";
-  pauseButton.disabled = true;
-  pauseButton.textContent = "Pause";
+  pauseButton.disabled = false;
+  pauseButton.textContent = "Reset";
   errorMessage.textContent = "";
+  updateDisplay();
+}
+
+function resetReadyTimers() {
+  if (state.phase !== "idle" || state.running || state.paused) return;
+
+  workInput.value = "30";
+  restInput.value = "15";
+  totalDurationInput.value = "21";
+  normalizeTotalDuration();
+  [workInput, restInput, totalDurationInput].forEach(syncSettingInputWidth);
+  state.remainingMs = 30 * 1000;
+  state.totalElapsedMs = 0;
+  state.totalBeforeCurrentRunMs = 0;
+  state.currentRunStartedAt = 0;
+  state.endTime = 0;
+  errorMessage.textContent = "";
+  saveSettings();
   updateDisplay();
 }
 
@@ -453,7 +471,13 @@ startButton.addEventListener("click", () => {
     startWorkout();
   }
 });
-pauseButton.addEventListener("click", pauseOrResume);
+pauseButton.addEventListener("click", () => {
+  if (state.phase === "idle" && !state.running && !state.paused) {
+    resetReadyTimers();
+  } else {
+    pauseOrResume();
+  }
+});
 readyButton.addEventListener("click", returnToReady);
 workInput.addEventListener("input", previewWorkTime);
 totalDurationInput.addEventListener("input", previewTotalDuration);
@@ -491,6 +515,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=46").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=48").catch(() => {});
   });
 }
