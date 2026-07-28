@@ -470,6 +470,24 @@ function previewTotalDuration() {
   }
 }
 
+function clearZeroInputOnFocus(input) {
+  if (Number(input.value) !== 0) return;
+  input.value = "";
+  syncSettingInputWidth(input);
+}
+
+function restoreEmptyInputOnBlur(input) {
+  if (input.value !== "") return;
+  input.value = "0";
+  syncSettingInputWidth(input);
+
+  if (input === workInput) state.remainingMs = 0;
+  if (input === totalDurationInput) state.totalDurationMs = 0;
+
+  saveSettings();
+  updateDisplay();
+}
+
 startButton.addEventListener("click", () => {
   if (state.paused) {
     endWorkout();
@@ -488,18 +506,23 @@ readyButton.addEventListener("click", returnToReady);
 workInput.addEventListener("input", previewWorkTime);
 totalDurationInput.addEventListener("input", previewTotalDuration);
 workInput.addEventListener("change", () => {
-  normalizeTotalDuration();
+  if (workInput.value === "") return;
+  if (parseDuration(workInput) && parseDuration(restInput)) normalizeTotalDuration();
   saveSettings();
 });
 restInput.addEventListener("change", () => {
-  normalizeTotalDuration();
+  if (restInput.value === "") return;
+  if (parseDuration(workInput) && parseDuration(restInput)) normalizeTotalDuration();
   saveSettings();
 });
 totalDurationInput.addEventListener("change", () => {
-  normalizeTotalDuration();
+  if (totalDurationInput.value === "") return;
+  if (parseDuration(workInput) && parseDuration(restInput)) normalizeTotalDuration();
   saveSettings();
 });
 [workInput, restInput, totalDurationInput].forEach((input) => {
+  input.addEventListener("focus", () => clearZeroInputOnFocus(input));
+  input.addEventListener("blur", () => restoreEmptyInputOnBlur(input));
   input.addEventListener("input", () => syncSettingInputWidth(input));
 });
 
@@ -525,6 +548,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=49").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=50").catch(() => {});
   });
 }

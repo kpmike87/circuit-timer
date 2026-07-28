@@ -21,6 +21,7 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Back to Ready returns to the timer setup
 - Start/end and pause/resume controls
 - Ready-screen Reset clears every timer and setting to zero
+- Zero-valued settings clear automatically when tapped for immediate typing
 - Screen wake lock when supported
 - Device-local saved settings
 - Installable and available offline as a Progressive Web App
