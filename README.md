@@ -17,6 +17,7 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Large WORKOUT and REST displays with distinct colors
 - Total Workout automatically uses whole-minute values that complete a full work/rest cycle
 - End Workout opens a summary with total, workout, and rest time plus completed rounds
+- Summary feedback scales from playfully harsh to highly enthusiastic based on completion percentage
 - Back to Ready returns to the timer setup
 - Start/end and pause/resume controls
 - Screen wake lock when supported

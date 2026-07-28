@@ -11,6 +11,7 @@ const startButton = document.querySelector("#startButton");
 const pauseButton = document.querySelector("#pauseButton");
 const errorMessage = document.querySelector("#errorMessage");
 const summaryTitle = document.querySelector("#summaryTitle");
+const summaryMessage = document.querySelector("#summaryMessage");
 const summaryTotalTime = document.querySelector("#summaryTotalTime");
 const summaryWorkoutTime = document.querySelector("#summaryWorkoutTime");
 const summaryRestTime = document.querySelector("#summaryRestTime");
@@ -372,8 +373,22 @@ function endWorkout() {
   releaseWakeLock();
 }
 
+function getSummaryFeedback(completionPercent) {
+  if (completionPercent < 10) return "That was adorable.";
+  if (completionPercent < 25) return "Your warm-up wants a refund.";
+  if (completionPercent < 50) return "The workout won this round.";
+  if (completionPercent < 75) return "Okay! Your excuses are sweating.";
+  if (completionPercent < 90) return "Strong work! The finish line got nervous.";
+  if (completionPercent < 100) return "So close! The finish line flinched.";
+  return "ABSOLUTE MACHINE! YOU CRUSHED IT!";
+}
+
 function showWorkoutSummary() {
   const totalSeconds = Math.max(0, Math.floor(state.totalElapsedMs / 1000));
+  const completionPercent =
+    state.totalDurationMs > 0
+      ? Math.min(100, Math.round((state.totalElapsedMs / state.totalDurationMs) * 100))
+      : 0;
   const workSeconds = parseDuration(workInput) || 0;
   const restSeconds = parseDuration(restInput) || 0;
   const cycleSeconds = workSeconds + restSeconds;
@@ -383,6 +398,9 @@ function showWorkoutSummary() {
     completedRounds * workSeconds + Math.min(secondsIntoCurrentRound, workSeconds);
   const totalRestSeconds = Math.max(0, totalSeconds - totalWorkoutSeconds);
 
+  summaryTitle.textContent = getSummaryFeedback(completionPercent);
+  summaryMessage.textContent =
+    `You completed ${completionPercent}% of your planned workout.`;
   summaryTotalTime.textContent = formatElapsedTime(totalSeconds * 1000);
   summaryWorkoutTime.textContent = formatElapsedTime(totalWorkoutSeconds * 1000);
   summaryRestTime.textContent = formatElapsedTime(totalRestSeconds * 1000);
@@ -473,6 +491,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=39").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=42").catch(() => {});
   });
 }

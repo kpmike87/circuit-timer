@@ -482,7 +482,7 @@ footer p {
   display: block;
   min-height: 2.4em;
   color: rgba(255, 255, 255, 0.64);
-  font-size: 0.61rem;
+  font-size: 0.75rem;
   line-height: 1.2;
 }
 
@@ -591,7 +591,7 @@ footer p {
 
   .summary-stat span {
     min-height: 1.2em;
-    font-size: 0.56rem;
+    font-size: 0.68rem;
   }
 
   .summary-stat strong {
@@ -773,7 +773,8 @@ footer p {
   }
 
   .app[data-phase="idle"][data-view="timer"] .timer-hint {
-    top: max(1rem, env(safe-area-inset-top));
+    top: auto;
+    bottom: max(4.85rem, calc(env(safe-area-inset-bottom) + 4.6rem));
     text-align: center;
   }
 
@@ -793,7 +794,7 @@ footer p {
 
   .app[data-phase="idle"][data-view="timer"] .error-message {
     top: auto;
-    bottom: max(4.75rem, calc(env(safe-area-inset-bottom) + 4.5rem));
+    bottom: max(6.75rem, calc(env(safe-area-inset-bottom) + 6.5rem));
   }
 
   footer {
