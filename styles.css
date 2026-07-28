@@ -215,7 +215,7 @@ h1 {
 
 .app[data-phase="idle"] .timer-hint {
   color: rgba(255, 255, 255, 0.94);
-  font-size: 1.4rem;
+  font-size: 1.55rem;
   font-weight: 850;
 }
 
@@ -696,7 +696,7 @@ footer p {
     bottom: auto;
     left: auto;
     width: min(35vw, 18rem);
-    font-size: 1.08rem;
+    font-size: 1.2rem;
     line-height: 1.2;
     white-space: normal;
     transform: none;
