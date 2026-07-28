@@ -215,7 +215,7 @@ h1 {
 
 .app[data-phase="idle"] .timer-hint {
   color: rgba(255, 255, 255, 0.94);
-  font-size: 1.25rem;
+  font-size: 1.4rem;
   font-weight: 850;
 }
 
@@ -244,12 +244,17 @@ h1 {
 
 .input-group label {
   display: block;
-  min-height: 1.9em;
+  min-height: 2.5rem;
   margin-bottom: 0.4rem;
   color: rgba(255, 255, 255, 0.72);
   font-size: 1rem;
   font-weight: 900;
+  line-height: 1.15;
   text-align: left;
+}
+
+.input-group:nth-child(-n + 2) label {
+  font-size: 1.15rem;
 }
 
 .input-shell {
@@ -282,7 +287,7 @@ h1 {
 
 .input-shell span {
   color: rgba(255, 255, 255, 0.58);
-  font-size: 0.92rem;
+  font-size: 1.05rem;
   font-weight: 700;
 }
 
@@ -691,7 +696,7 @@ footer p {
     bottom: auto;
     left: auto;
     width: min(35vw, 18rem);
-    font-size: 0.96rem;
+    font-size: 1.08rem;
     line-height: 1.2;
     white-space: normal;
     transform: none;
@@ -717,11 +722,16 @@ footer p {
   }
 
   .setup-card .input-group label {
-    min-height: 0;
+    min-height: 1.05rem;
     margin-bottom: 0.08rem;
     font-size: 0.72rem;
     font-weight: 900;
+    line-height: 1.05rem;
     white-space: nowrap;
+  }
+
+  .setup-card .input-group:nth-child(-n + 2) label {
+    font-size: 0.82rem;
   }
 
   .setup-card .input-shell input {
@@ -735,7 +745,7 @@ footer p {
   }
 
   .setup-card .input-shell span {
-    font-size: 0.68rem;
+    font-size: 0.78rem;
   }
 
   .controls {
@@ -780,7 +790,7 @@ footer p {
   }
 
   .app[data-phase="idle"][data-view="timer"] .timer-hint {
-    top: 35%;
+    top: 32%;
     bottom: auto;
     text-align: center;
     transform: translateY(-50%);
