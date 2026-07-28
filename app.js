@@ -138,11 +138,7 @@ function setPhase(phase) {
     timerHint.textContent = "Workout finished. Great work.";
   } else {
     phaseLabel.textContent = "READY";
-    timerHint.replaceChildren(
-      "Set your intervals,",
-      document.createElement("br"),
-      "then press start.",
-    );
+    timerHint.textContent = "Set your intervals, then press start.";
   }
 }
 
@@ -552,6 +548,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=54").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=55").catch(() => {});
   });
 }
