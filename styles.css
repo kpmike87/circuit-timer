@@ -773,15 +773,17 @@ footer p {
   }
 
   .app[data-phase="idle"][data-view="timer"] .timer-hint {
-    top: auto;
-    bottom: max(5.75rem, calc(env(safe-area-inset-bottom) + 5.5rem));
+    top: 50%;
+    bottom: auto;
     text-align: center;
+    transform: translateY(-50%);
   }
 
   .app[data-phase="idle"][data-view="timer"] .setup-card {
-    top: 50%;
+    top: auto;
+    bottom: max(5.75rem, calc(env(safe-area-inset-bottom) + 5.5rem));
     gap: 0.5rem;
-    transform: translateY(-50%);
+    transform: none;
   }
 
   .app[data-phase="idle"][data-view="timer"] .setup-card .input-group {
@@ -794,7 +796,7 @@ footer p {
 
   .app[data-phase="idle"][data-view="timer"] .error-message {
     top: auto;
-    bottom: max(7.75rem, calc(env(safe-area-inset-bottom) + 7.5rem));
+    bottom: max(10rem, calc(env(safe-area-inset-bottom) + 9.75rem));
   }
 
   footer {
