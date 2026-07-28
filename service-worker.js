@@ -1,9 +1,9 @@
-const CACHE_NAME = "circuit-timer-v38";
+const CACHE_NAME = "circuit-timer-v39";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=38",
-  "./app.js?v=38",
+  "./styles.css?v=39",
+  "./app.js?v=39",
   "./manifest.webmanifest",
   "./icon.svg",
 ];

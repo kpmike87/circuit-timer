@@ -320,7 +320,7 @@ function finishWorkout() {
   pauseButton.disabled = true;
   pauseButton.textContent = "Pause";
   releaseWakeLock();
-  updateDisplay();
+  showWorkoutSummary();
 }
 
 function pauseOrResume() {
@@ -473,6 +473,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=38").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=39").catch(() => {});
   });
 }
