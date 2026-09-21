@@ -1,4 +1,4 @@
 // Set this to the deployed Cloudflare Worker URL before enabling the AI Builder.
 window.CIRCUIT_TIMER_CONFIG = Object.freeze({
-  aiWorkerUrl: "https://feature-ai-circuit-builder-circuit-timer.mrizzo125.workers.dev",
+  aiWorkerUrl: "https://circuit-timer.mrizzo125.workers.dev",
 });
