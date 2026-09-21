@@ -17,6 +17,7 @@ const summaryWorkoutTime = document.querySelector("#summaryWorkoutTime");
 const summaryRestTime = document.querySelector("#summaryRestTime");
 const summaryRounds = document.querySelector("#summaryRounds");
 const readyButton = document.querySelector("#readyButton");
+const soundToggle = document.querySelector("#soundToggle");
 const themeColor = document.querySelector('meta[name="theme-color"]');
 
 const COLORS = {
@@ -39,6 +40,9 @@ const state = {
   currentRunStartedAt: 0,
   intervalId: null,
   wakeLock: null,
+  audio: null,
+  soundOn: true,
+  lastTickSecond: 0,
 };
 
 function parseDuration(input) {
@@ -124,6 +128,7 @@ function formatTime(milliseconds) {
 
 function setPhase(phase) {
   state.phase = phase;
+  state.lastTickSecond = 0;
   app.dataset.phase = phase;
   themeColor.content = COLORS[phase];
 
@@ -155,6 +160,7 @@ function saveSettings() {
       work: workInput.value,
       rest: restInput.value,
       totalDuration: totalDurationInput.value,
+      sound: state.soundOn,
     }),
   );
 }
@@ -166,6 +172,7 @@ function loadSettings() {
     if (saved.work) workInput.value = saved.work;
     if (saved.rest) restInput.value = saved.rest;
     if (saved.totalDuration) totalDurationInput.value = saved.totalDuration;
+    if (saved.sound === false) state.soundOn = false;
   } catch {
     localStorage.removeItem("circuit-timer-settings");
   }
@@ -190,6 +197,78 @@ async function releaseWakeLock() {
   } finally {
     state.wakeLock = null;
   }
+}
+
+function ensureAudioContext() {
+  if (!state.soundOn) return null;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+
+  if (!state.audio) state.audio = new AudioContextClass();
+  if (state.audio.state === "suspended") state.audio.resume().catch(() => {});
+
+  return state.audio;
+}
+
+function playTone(frequency, durationSeconds, delaySeconds = 0, volume = 0.14) {
+  const audio = ensureAudioContext();
+  if (!audio) return;
+
+  try {
+    const startAt = audio.currentTime + delaySeconds;
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(volume, startAt);
+    gain.gain.exponentialRampToValueAtTime(0.001, startAt + durationSeconds);
+    oscillator.connect(gain).connect(audio.destination);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + durationSeconds + 0.02);
+  } catch {
+    // Audio is unavailable; stay silent.
+  }
+}
+
+function playPhaseTone(phase) {
+  if (!state.soundOn) return;
+
+  if (phase === "work") {
+    playTone(880, 0.12);
+    playTone(1175, 0.18, 0.14);
+  } else if (phase === "rest") {
+    playTone(587, 0.2);
+    playTone(440, 0.25, 0.18);
+  }
+}
+
+function playCountdownTick() {
+  playTone(1047, 0.07, 0, 0.08);
+}
+
+function playCompleteChime() {
+  if (!state.soundOn) return;
+
+  playTone(523, 0.15);
+  playTone(659, 0.15, 0.16);
+  playTone(784, 0.15, 0.32);
+  playTone(1047, 0.35, 0.48);
+}
+
+function vibratePattern(pattern) {
+  if (!state.soundOn || !("vibrate" in navigator)) return;
+
+  try {
+    navigator.vibrate(pattern);
+  } catch {
+    // Vibration is unavailable; skip.
+  }
+}
+
+function syncSoundToggle() {
+  soundToggle.textContent = state.soundOn ? "Sound On" : "Sound Off";
+  soundToggle.setAttribute("aria-pressed", String(state.soundOn));
 }
 
 function updateDisplay() {
@@ -244,6 +323,10 @@ function advancePhase(now) {
     state.endTime = now + getDurationMs(state.phase);
   }
 
+  if (transitionCount > 0) {
+    playPhaseTone(state.phase);
+    vibratePattern(state.phase === "work" ? [80, 60, 80] : [120]);
+  }
 }
 
 function tick() {
@@ -258,6 +341,19 @@ function tick() {
 
   advancePhase(now);
   state.remainingMs = Math.max(0, state.endTime - now);
+
+  const secondsLeft = Math.ceil(state.remainingMs / 1000);
+  if (
+    state.soundOn &&
+    (state.phase === "work" || state.phase === "rest") &&
+    secondsLeft >= 1 &&
+    secondsLeft <= 3 &&
+    secondsLeft !== state.lastTickSecond
+  ) {
+    state.lastTickSecond = secondsLeft;
+    playCountdownTick();
+  }
+
   updateDisplay();
 }
 
@@ -298,6 +394,9 @@ function startWorkout() {
   state.currentRunStartedAt = Date.now();
   state.endTime = state.currentRunStartedAt + state.remainingMs;
 
+  playPhaseTone("work");
+  vibratePattern([80, 60, 80]);
+
   startButton.disabled = true;
   startButton.textContent = "Workout in Progress";
   pauseButton.disabled = false;
@@ -321,6 +420,8 @@ function finishWorkout() {
   pauseButton.disabled = true;
   pauseButton.textContent = "Pause";
   releaseWakeLock();
+  playCompleteChime();
+  vibratePattern([120, 80, 120, 80, 200]);
   showWorkoutSummary();
 }
 
@@ -503,6 +604,16 @@ pauseButton.addEventListener("click", () => {
   }
 });
 readyButton.addEventListener("click", returnToReady);
+soundToggle.addEventListener("click", () => {
+  state.soundOn = !state.soundOn;
+  syncSoundToggle();
+  saveSettings();
+
+  if (state.soundOn) {
+    ensureAudioContext();
+    playTone(880, 0.1);
+  }
+});
 workInput.addEventListener("input", previewWorkTime);
 totalDurationInput.addEventListener("input", previewTotalDuration);
 workInput.addEventListener("change", () => {
@@ -536,6 +647,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("beforeunload", releaseWakeLock);
 
 loadSettings();
+syncSoundToggle();
 const settingsAreCleared =
   Number(workInput.value) === 0 &&
   Number(restInput.value) === 0 &&
@@ -548,6 +660,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=55").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=56").catch(() => {});
   });
 }

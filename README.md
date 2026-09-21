@@ -23,6 +23,7 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Ready-screen Reset clears every timer and setting to zero
 - Zero-valued settings clear automatically when tapped for immediate typing
 - Screen wake lock when supported
+- Sound cues with a mute toggle: distinct tones for work and rest, countdown ticks for the final three seconds, a completion chime, and vibration on supporting devices
 - Device-local saved settings
 - Installable and available offline as a Progressive Web App
 
