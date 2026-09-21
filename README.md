@@ -24,6 +24,7 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Zero-valued settings clear automatically when tapped for immediate typing
 - Screen wake lock when supported
 - Sound cues with a mute toggle: distinct tones for work and rest, countdown ticks for the final three seconds, a completion chime, and vibration on supporting devices
+- Workout history page: finished workouts are saved on your device with date, durations, rounds, and completion, plus per-entry delete and clear-all
 - Device-local saved settings
 - Installable and available offline as a Progressive Web App
 

@@ -18,6 +18,12 @@ const summaryRestTime = document.querySelector("#summaryRestTime");
 const summaryRounds = document.querySelector("#summaryRounds");
 const readyButton = document.querySelector("#readyButton");
 const soundToggle = document.querySelector("#soundToggle");
+const historyToggle = document.querySelector("#historyToggle");
+const historyTitle = document.querySelector("#historyTitle");
+const historyCount = document.querySelector("#historyCount");
+const historyList = document.querySelector("#historyList");
+const historyClearButton = document.querySelector("#historyClearButton");
+const historyBackButton = document.querySelector("#historyBackButton");
 const themeColor = document.querySelector('meta[name="theme-color"]');
 
 const COLORS = {
@@ -44,6 +50,9 @@ const state = {
   soundOn: true,
   lastTickSecond: 0,
 };
+
+const HISTORY_KEY = "circuit-timer-history";
+const HISTORY_LIMIT = 100;
 
 function parseDuration(input) {
   const seconds = Number(input.value);
@@ -269,6 +278,122 @@ function vibratePattern(pattern) {
 function syncSoundToggle() {
   soundToggle.textContent = state.soundOn ? "Sound On" : "Sound Off";
   soundToggle.setAttribute("aria-pressed", String(state.soundOn));
+}
+
+function loadHistory() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(HISTORY_KEY));
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(history) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    // Storage is unavailable; history will not persist.
+  }
+}
+
+function saveWorkoutRecord({ totalSeconds, workSeconds, restSeconds, rounds, completionPercent }) {
+  if (totalSeconds < 1) return;
+
+  const history = loadHistory();
+  history.unshift({
+    finishedAt: Date.now(),
+    totalSeconds,
+    workSeconds,
+    restSeconds,
+    rounds,
+    completionPercent,
+    workInterval: parseDuration(workInput) || 0,
+    restInterval: parseDuration(restInput) || 0,
+  });
+  if (history.length > HISTORY_LIMIT) history.length = HISTORY_LIMIT;
+  saveHistory(history);
+}
+
+function formatHistoryDate(timestamp) {
+  return new Date(timestamp).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function renderHistory() {
+  const history = loadHistory();
+  const totalSeconds = history.reduce((sum, record) => sum + record.totalSeconds, 0);
+
+  historyCount.textContent =
+    history.length === 0
+      ? "No workouts logged yet."
+      : `${history.length} workout${history.length === 1 ? "" : "s"} · ${formatElapsedTime(totalSeconds * 1000)} total`;
+
+  historyList.textContent = "";
+
+  if (history.length === 0) {
+    const emptyMessage = document.createElement("p");
+    emptyMessage.className = "history-empty";
+    emptyMessage.textContent = "Finish your first workout and it will appear here.";
+    historyList.appendChild(emptyMessage);
+    return;
+  }
+
+  history.forEach((record, index) => {
+    const entry = document.createElement("article");
+    entry.className = "history-entry";
+
+    const details = document.createElement("div");
+
+    const dateLine = document.createElement("p");
+    dateLine.className = "history-entry-date";
+    dateLine.textContent = formatHistoryDate(record.finishedAt);
+    details.appendChild(dateLine);
+
+    const statsLine = document.createElement("p");
+    statsLine.className = "history-entry-stats";
+    statsLine.textContent =
+      `${formatElapsedTime(record.totalSeconds * 1000)} total · ` +
+      `${formatElapsedTime(record.workSeconds * 1000)} work · ` +
+      `${formatElapsedTime(record.restSeconds * 1000)} rest · ` +
+      `${record.rounds} round${record.rounds === 1 ? "" : "s"} · ` +
+      `${record.completionPercent}%`;
+    details.appendChild(statsLine);
+
+    const intervalsLine = document.createElement("p");
+    intervalsLine.className = "history-entry-intervals";
+    intervalsLine.textContent = `${record.workInterval}s work / ${record.restInterval}s rest intervals`;
+    details.appendChild(intervalsLine);
+
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "history-delete-button";
+    deleteButton.type = "button";
+    deleteButton.textContent = "×";
+    deleteButton.setAttribute("aria-label", `Delete workout from ${formatHistoryDate(record.finishedAt)}`);
+    deleteButton.dataset.index = String(index);
+
+    entry.appendChild(details);
+    entry.appendChild(deleteButton);
+    historyList.appendChild(entry);
+  });
+}
+
+function openHistory() {
+  if (state.running || state.paused) return;
+  renderHistory();
+  app.dataset.view = "history";
+  document.title = "Workout History - Circuit Timer";
+  window.requestAnimationFrame(() => historyTitle.focus());
+}
+
+function closeHistory() {
+  app.dataset.view = "timer";
+  updateDisplay();
 }
 
 function updateDisplay() {
@@ -506,6 +631,13 @@ function showWorkoutSummary() {
   summaryWorkoutTime.textContent = formatElapsedTime(totalWorkoutSeconds * 1000);
   summaryRestTime.textContent = formatElapsedTime(totalRestSeconds * 1000);
   summaryRounds.textContent = String(completedRounds);
+  saveWorkoutRecord({
+    totalSeconds,
+    workSeconds: totalWorkoutSeconds,
+    restSeconds: totalRestSeconds,
+    rounds: completedRounds,
+    completionPercent,
+  });
   app.dataset.view = "summary";
   setPhase("complete");
   document.title = "Workout Summary - Circuit Timer";
@@ -614,6 +746,23 @@ soundToggle.addEventListener("click", () => {
     playTone(880, 0.1);
   }
 });
+historyToggle.addEventListener("click", openHistory);
+historyBackButton.addEventListener("click", closeHistory);
+historyClearButton.addEventListener("click", () => {
+  if (loadHistory().length === 0) return;
+  if (!window.confirm("Delete all workout history? This cannot be undone.")) return;
+  saveHistory([]);
+  renderHistory();
+});
+historyList.addEventListener("click", (event) => {
+  const deleteButton = event.target.closest(".history-delete-button");
+  if (!deleteButton) return;
+
+  const history = loadHistory();
+  history.splice(Number(deleteButton.dataset.index), 1);
+  saveHistory(history);
+  renderHistory();
+});
 workInput.addEventListener("input", previewWorkTime);
 totalDurationInput.addEventListener("input", previewTotalDuration);
 workInput.addEventListener("change", () => {
@@ -660,6 +809,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=56").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=57").catch(() => {});
   });
 }

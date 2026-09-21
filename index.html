@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=56" />
+    <link rel="stylesheet" href="./styles.css?v=57" />
     <title>Circuit Timer</title>
   </head>
   <body>
@@ -18,7 +18,10 @@
           <p class="eyebrow">CIRCUIT TIMER</p>
           <h1>Move. Recover. Repeat.</h1>
         </div>
-        <button class="sound-toggle" id="soundToggle" type="button" aria-pressed="true">Sound On</button>
+        <div class="topbar-actions">
+          <button class="topbar-button sound-toggle" id="soundToggle" type="button" aria-pressed="true">Sound On</button>
+          <button class="topbar-button history-toggle" id="historyToggle" type="button">History</button>
+        </div>
       </header>
 
       <section class="timer-card" aria-labelledby="phaseLabel">
@@ -108,8 +111,21 @@
 
         <button class="summary-ready-button" id="readyButton" type="button">Back to Ready</button>
       </section>
+
+      <section class="history-screen" id="historyScreen" aria-labelledby="historyTitle">
+        <div class="summary-heading">
+          <p class="eyebrow">WORKOUT HISTORY</p>
+          <h2 id="historyTitle" tabindex="-1">Past Workouts</h2>
+          <p id="historyCount">No workouts logged yet.</p>
+        </div>
+        <div class="history-list" id="historyList" aria-label="Workout history entries"></div>
+        <div class="history-actions">
+          <button class="history-clear-button" id="historyClearButton" type="button">Clear History</button>
+          <button class="history-back-button" id="historyBackButton" type="button">Back to Ready</button>
+        </div>
+      </section>
     </main>
 
-    <script src="./app.js?v=56" defer></script>
+    <script src="./app.js?v=57" defer></script>
   </body>
 </html>
