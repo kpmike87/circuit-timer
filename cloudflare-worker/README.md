@@ -6,11 +6,11 @@ This Worker generates structured circuit plans for the GitHub Pages Circuit Time
 
 - Worker name: `circuit-timer`
 - AI binding: `AI`
-- Model: `@cf/meta/llama-3.2-3b-instruct`
+- Model: `@cf/meta/llama-3.1-8b-instruct`
 - API route: `POST /api/generate-workout`
 - Allowed browser origin: `https://kpmike87.github.io`
 
-The Worker asks the model for a JSON object, then validates the model response before returning it. It does not use authentication, D1, KV, Durable Objects, or secrets.
+The Worker uses Workers AI JSON Mode, then validates the model response before returning it. It does not use authentication, D1, KV, Durable Objects, or secrets.
 
 ## Deploy
 
