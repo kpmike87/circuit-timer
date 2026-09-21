@@ -5,30 +5,6 @@ const ALLOWED_DIFFICULTIES = new Set(["beginner", "intermediate", "advanced"]);
 const ALLOWED_FOCUSES = new Set(["full-body", "upper-body", "lower-body", "core", "cardio"]);
 const ALLOWED_EQUIPMENT = new Set(["bodyweight", "dumbbells", "bands"]);
 
-const MODEL_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    title: { type: "string", minLength: 3, maxLength: 80 },
-    exercises: {
-      type: "array",
-      minItems: 1,
-      maxItems: 8,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          name: { type: "string", minLength: 2, maxLength: 60 },
-          instructions: { type: "string", minLength: 4, maxLength: 180 },
-        },
-        required: ["name", "instructions"],
-      },
-    },
-    safetyNote: { type: "string", minLength: 4, maxLength: 180 },
-  },
-  required: ["title", "exercises", "safetyNote"],
-};
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -70,7 +46,7 @@ export default {
           {
             role: "system",
             content:
-              "You create safe, practical circuit workouts. Return only JSON matching the supplied schema. " +
+              "You create safe, practical circuit workouts. Return only one JSON object with title, exercises, and safetyNote. " +
               "Do not give medical advice. Do not include exercises that require equipment the user did not select. " +
               "Use common exercise names and short, clear instructions. Respect every user instruction unless it conflicts with safety.",
           },
@@ -79,14 +55,6 @@ export default {
             content: buildPrompt(input),
           },
         ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "circuit_workout",
-            strict: true,
-            schema: MODEL_SCHEMA,
-          },
-        },
       });
 
       const parsed = parseModelResponse(modelResponse);
