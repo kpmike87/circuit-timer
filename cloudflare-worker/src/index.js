@@ -1,4 +1,4 @@
-const MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8";
 const MAX_INSTRUCTIONS_LENGTH = 240;
 const ALLOWED_ORIGINS = new Set(["https://kpmike87.github.io"]);
 const ALLOWED_DIFFICULTIES = new Set(["beginner", "intermediate", "advanced"]);
@@ -60,6 +60,7 @@ export default {
           },
         ],
         response_format: { type: "json_object" },
+        max_tokens: 1024,
       });
 
       stage = "parse";
