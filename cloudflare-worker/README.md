@@ -6,7 +6,7 @@ This Worker generates structured circuit plans for the GitHub Pages Circuit Time
 
 - Worker name: `circuit-timer`
 - AI binding: `AI`
-- Model: `@cf/meta/llama-3.1-8b-instruct`
+- Model: `@cf/meta/llama-3.1-8b-instruct-fp8`
 - API route: `POST /api/generate-workout`
 - Allowed browser origin: `https://kpmike87.github.io`
 
