@@ -323,7 +323,7 @@ function syncSoundToggle() {
 
 function syncExerciseDisplay() {
   if (!state.plan || state.plan.exercises.length === 0) {
-    exerciseLabel.textContent = "Set up your intervals, then press start.";
+    exerciseLabel.textContent = "";
     exerciseInstructions.textContent = "";
     return;
   }
