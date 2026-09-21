@@ -1,4 +1,4 @@
-const app = document.querySelector(".app");
+﻿const app = document.querySelector(".app");
 const workInput = document.querySelector("#workTime");
 const restInput = document.querySelector("#restTime");
 const totalDurationInput = document.querySelector("#totalDuration");
@@ -24,6 +24,27 @@ const historyCount = document.querySelector("#historyCount");
 const historyList = document.querySelector("#historyList");
 const historyClearButton = document.querySelector("#historyClearButton");
 const historyBackButton = document.querySelector("#historyBackButton");
+const aiBuilderToggle = document.querySelector("#aiBuilderToggle");
+const exerciseLabel = document.querySelector("#exerciseLabel");
+const exerciseInstructions = document.querySelector("#exerciseInstructions");
+const builderScreen = document.querySelector("#builderScreen");
+const aiBuilderForm = document.querySelector("#aiBuilderForm");
+const aiDuration = document.querySelector("#aiDuration");
+const aiWorkSeconds = document.querySelector("#aiWorkSeconds");
+const aiRestSeconds = document.querySelector("#aiRestSeconds");
+const aiDifficulty = document.querySelector("#aiDifficulty");
+const aiInstructions = document.querySelector("#aiInstructions");
+const aiInstructionsCount = document.querySelector("#aiInstructionsCount");
+const aiBuilderError = document.querySelector("#aiBuilderError");
+const generateWorkoutButton = document.querySelector("#generateWorkoutButton");
+const aiPreview = document.querySelector("#aiPreview");
+const aiPreviewTitle = document.querySelector("#aiPreviewTitle");
+const aiPreviewMeta = document.querySelector("#aiPreviewMeta");
+const aiExerciseList = document.querySelector("#aiExerciseList");
+const aiSafetyNote = document.querySelector("#aiSafetyNote");
+const aiEditButton = document.querySelector("#aiEditButton");
+const loadAiWorkoutButton = document.querySelector("#loadAiWorkoutButton");
+const builderBackButton = document.querySelector("#builderBackButton");
 const themeColor = document.querySelector('meta[name="theme-color"]');
 
 const COLORS = {
@@ -49,10 +70,29 @@ const state = {
   audio: null,
   soundOn: true,
   lastTickSecond: 0,
+  plan: null,
+  currentExerciseIndex: 0,
 };
 
 const HISTORY_KEY = "circuit-timer-history";
 const HISTORY_LIMIT = 100;
+const AI_WORKER_URL =
+  typeof window.CIRCUIT_TIMER_CONFIG?.aiWorkerUrl === "string"
+    ? window.CIRCUIT_TIMER_CONFIG.aiWorkerUrl.trim().replace(/\/+$/, "")
+    : "";
+const AI_MAX_INSTRUCTIONS_LENGTH = 240;
+const AI_DIFFICULTY_LABELS = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
+};
+const AI_FOCUS_LABELS = {
+  "full-body": "Full body",
+  "upper-body": "Upper body",
+  "lower-body": "Lower body",
+  core: "Core",
+  cardio: "Cardio",
+};
 
 function parseDuration(input) {
   const seconds = Number(input.value);
@@ -140,6 +180,7 @@ function setPhase(phase) {
   state.lastTickSecond = 0;
   app.dataset.phase = phase;
   themeColor.content = COLORS[phase];
+  syncExerciseDisplay();
 
   if (phase === "work") {
     phaseLabel.textContent = "WORKOUT";
@@ -278,6 +319,224 @@ function vibratePattern(pattern) {
 function syncSoundToggle() {
   soundToggle.textContent = state.soundOn ? "Sound On" : "Sound Off";
   soundToggle.setAttribute("aria-pressed", String(state.soundOn));
+}
+
+function syncExerciseDisplay() {
+  if (!state.plan || state.plan.exercises.length === 0) {
+    exerciseLabel.textContent = "";
+    exerciseInstructions.textContent = "";
+    return;
+  }
+
+  const exercise = state.plan.exercises[state.currentExerciseIndex % state.plan.exercises.length];
+  exerciseLabel.textContent = exercise.name;
+  exerciseInstructions.textContent = exercise.instructions;
+}
+
+function getSelectedFocus() {
+  return aiBuilderForm.querySelector('input[name="focus"]:checked')?.value || "full-body";
+}
+
+function getSelectedEquipment() {
+  return Array.from(aiBuilderForm.querySelectorAll('input[name="equipment"]:checked')).map(
+    (input) => input.value,
+  );
+}
+
+function getBuilderRequest() {
+  return {
+    durationMinutes: Number(aiDuration.value),
+    workSeconds: Number(aiWorkSeconds.value),
+    restSeconds: Number(aiRestSeconds.value),
+    difficulty: aiDifficulty.value,
+    focus: getSelectedFocus(),
+    equipment: getSelectedEquipment(),
+    instructions: aiInstructions.value.trim(),
+  };
+}
+
+function syncBuilderDurationOptions() {
+  const workSeconds = Number(aiWorkSeconds.value);
+  const restSeconds = Number(aiRestSeconds.value);
+  const cycleSeconds = workSeconds + restSeconds;
+  const currentValue = Number(aiDuration.value) || 15;
+  const options = [];
+
+  for (let minutes = 5; minutes <= 120; minutes += 1) {
+    if ((minutes * 60) % cycleSeconds === 0) options.push(minutes);
+  }
+
+  aiDuration.textContent = "";
+  options.forEach((minutes) => {
+    const option = document.createElement("option");
+    option.value = String(minutes);
+    option.textContent = `${minutes} minute${minutes === 1 ? "" : "s"}`;
+    aiDuration.appendChild(option);
+  });
+  aiDuration.value = String(options.includes(currentValue) ? currentValue : options[0]);
+}
+
+function populateBuilder() {
+  syncBuilderDurationOptions();
+  aiInstructionsCount.textContent = `0 / ${AI_MAX_INSTRUCTIONS_LENGTH}`;
+}
+
+function showBuilderError(message) {
+  aiBuilderError.textContent = message;
+}
+
+function clearBuilderError() {
+  showBuilderError("");
+}
+
+function openBuilder() {
+  if (state.running || state.paused) return;
+  populateBuilder();
+  clearBuilderError();
+  app.dataset.view = "builder";
+  document.title = "AI Circuit Builder - Circuit Timer";
+  window.requestAnimationFrame(() => builderScreen.querySelector("h2").focus());
+}
+
+function closeBuilder() {
+  app.dataset.view = "timer";
+  updateDisplay();
+}
+
+function validateAIPlan(candidate, request) {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    throw new Error("The AI returned an invalid workout.");
+  }
+
+  const title = typeof candidate.title === "string" ? candidate.title.trim().slice(0, 80) : "";
+  const safetyNote =
+    typeof candidate.safetyNote === "string" ? candidate.safetyNote.trim().slice(0, 180) : "";
+  const exercises = Array.isArray(candidate.exercises) ? candidate.exercises : [];
+  const totalSeconds = request.durationMinutes * 60;
+  const cycleSeconds = request.workSeconds + request.restSeconds;
+
+  if (
+    !title ||
+    !safetyNote ||
+    exercises.length < 1 ||
+    exercises.length > 8 ||
+    totalSeconds % cycleSeconds !== 0
+  ) {
+    throw new Error("The AI returned a workout that did not pass validation.");
+  }
+
+  const cleanedExercises = exercises.map((exercise) => {
+    const name = typeof exercise?.name === "string" ? exercise.name.trim().slice(0, 60) : "";
+    const instructions =
+      typeof exercise?.instructions === "string"
+        ? exercise.instructions.trim().slice(0, 180)
+        : "";
+    if (!name || !instructions) {
+      throw new Error("The AI returned an incomplete exercise.");
+    }
+    return { name, instructions };
+  });
+
+  const intervalCount = totalSeconds / cycleSeconds;
+  if (intervalCount % cleanedExercises.length !== 0) {
+    throw new Error("The AI returned an exercise list that does not fit the timer.");
+  }
+
+  return {
+    title,
+    safetyNote,
+    exercises: cleanedExercises,
+    durationMinutes: request.durationMinutes,
+    durationSeconds: totalSeconds,
+    workSeconds: request.workSeconds,
+    restSeconds: request.restSeconds,
+    rounds: intervalCount / cleanedExercises.length,
+    difficulty: request.difficulty,
+    focus: request.focus,
+    equipment: request.equipment,
+  };
+}
+
+function renderAIPlan(plan) {
+  aiPreviewTitle.textContent = plan.title;
+  aiPreviewMeta.textContent =
+    `${plan.durationMinutes} minutes · ${plan.rounds} rounds · ` +
+    `${AI_DIFFICULTY_LABELS[plan.difficulty]} · ${AI_FOCUS_LABELS[plan.focus]}`;
+  aiExerciseList.textContent = "";
+
+  plan.exercises.forEach((exercise) => {
+    const item = document.createElement("li");
+    const name = document.createElement("strong");
+    const instructions = document.createElement("span");
+    name.textContent = exercise.name;
+    instructions.textContent = exercise.instructions;
+    item.append(name, instructions);
+    aiExerciseList.appendChild(item);
+  });
+
+  aiSafetyNote.textContent = plan.safetyNote;
+  aiPreview.hidden = false;
+}
+
+async function generateAIWorkout(event) {
+  event.preventDefault();
+  clearBuilderError();
+
+  if (!AI_WORKER_URL) {
+    showBuilderError("The AI Worker URL is not configured yet. Add it to ai-config.js after deployment.");
+    return;
+  }
+
+  const request = getBuilderRequest();
+  if (request.equipment.length === 0) {
+    showBuilderError("Choose at least one equipment option.");
+    return;
+  }
+
+  aiPreview.hidden = true;
+  generateWorkoutButton.disabled = true;
+  generateWorkoutButton.setAttribute("aria-busy", "true");
+  generateWorkoutButton.textContent = "Generating...";
+
+  try {
+    const response = await fetch(`${AI_WORKER_URL}/api/generate-workout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(body?.error || "The AI Worker request failed.");
+
+    const plan = validateAIPlan(body?.workout, request);
+    state.plan = plan;
+    state.currentExerciseIndex = 0;
+    renderAIPlan(plan);
+  } catch (error) {
+    showBuilderError(error instanceof Error ? error.message : "The AI Worker request failed.");
+  } finally {
+    generateWorkoutButton.disabled = false;
+    generateWorkoutButton.setAttribute("aria-busy", "false");
+    generateWorkoutButton.textContent = "Generate Workout with AI";
+  }
+}
+
+function loadAIPlanIntoTimer() {
+  if (!state.plan) return;
+
+  workInput.value = String(state.plan.workSeconds);
+  restInput.value = String(state.plan.restSeconds);
+  totalDurationInput.value = String(state.plan.durationMinutes);
+  [workInput, restInput, totalDurationInput].forEach(syncSettingInputWidth);
+  state.currentExerciseIndex = 0;
+  normalizeTotalDuration();
+  returnToReady();
+  saveSettings();
+}
+
+function editAIPlan() {
+  aiPreview.hidden = true;
+  clearBuilderError();
+  aiInstructions.focus();
 }
 
 function loadHistory() {
@@ -449,6 +708,11 @@ function advancePhase(now) {
   }
 
   if (transitionCount > 0) {
+    if (state.phase === "work" && state.plan) {
+      state.currentExerciseIndex =
+        (state.currentExerciseIndex + 1) % state.plan.exercises.length;
+      syncExerciseDisplay();
+    }
     playPhaseTone(state.phase);
     vibratePattern(state.phase === "work" ? [80, 60, 80] : [120]);
   }
@@ -518,6 +782,8 @@ function startWorkout() {
   state.totalBeforeCurrentRunMs = 0;
   state.currentRunStartedAt = Date.now();
   state.endTime = state.currentRunStartedAt + state.remainingMs;
+  state.currentExerciseIndex = 0;
+  syncExerciseDisplay();
 
   playPhaseTone("work");
   vibratePattern([80, 60, 80]);
@@ -763,6 +1029,16 @@ historyList.addEventListener("click", (event) => {
   saveHistory(history);
   renderHistory();
 });
+aiBuilderToggle.addEventListener("click", openBuilder);
+builderBackButton.addEventListener("click", closeBuilder);
+aiBuilderForm.addEventListener("submit", generateAIWorkout);
+aiWorkSeconds.addEventListener("change", syncBuilderDurationOptions);
+aiRestSeconds.addEventListener("change", syncBuilderDurationOptions);
+aiInstructions.addEventListener("input", () => {
+  aiInstructionsCount.textContent = `${aiInstructions.value.length} / ${AI_MAX_INSTRUCTIONS_LENGTH}`;
+});
+aiEditButton.addEventListener("click", editAIPlan);
+loadAiWorkoutButton.addEventListener("click", loadAIPlanIntoTimer);
 workInput.addEventListener("input", previewWorkTime);
 totalDurationInput.addEventListener("input", previewTotalDuration);
 workInput.addEventListener("change", () => {
@@ -797,6 +1073,8 @@ window.addEventListener("beforeunload", releaseWakeLock);
 
 loadSettings();
 syncSoundToggle();
+syncExerciseDisplay();
+populateBuilder();
 const settingsAreCleared =
   Number(workInput.value) === 0 &&
   Number(restInput.value) === 0 &&
@@ -809,6 +1087,6 @@ updateDisplay();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=57").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=58").catch(() => {});
   });
 }

@@ -1,4 +1,4 @@
-# Circuit Timer
+﻿# Circuit Timer
 
 A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScript.
 
@@ -25,8 +25,24 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Screen wake lock when supported
 - Sound cues with a mute toggle: distinct tones for work and rest, countdown ticks for the final three seconds, a completion chime, and vibration on supporting devices
 - Workout history page: finished workouts are saved on your device with date, durations, rounds, and completion, plus per-entry delete and clear-all
+- AI Circuit Builder: create a structured, reviewable circuit through a Cloudflare Worker using Workers AI, then load it directly into the timer
 - Device-local saved settings
 - Installable and available offline as a Progressive Web App
+
+## AI Circuit Builder
+
+The GitHub Pages frontend calls `POST /api/generate-workout` on the separately deployed Worker in `cloudflare-worker/`.
+The Worker uses the `@cf/meta/llama-3.2-3b-instruct` model with JSON mode, validates the response, and returns the exercise order, work/rest intervals, rounds, equipment, and safety note.
+
+After deploying the Worker, set its HTTPS URL in `ai-config.js`:
+
+```js
+window.CIRCUIT_TIMER_CONFIG = Object.freeze({
+  aiWorkerUrl: "https://your-worker.your-subdomain.workers.dev",
+});
+```
+
+The frontend keeps the user in control: it displays the returned circuit for review before loading the intervals and exercise order into the existing timer.
 
 ## Try it locally
 

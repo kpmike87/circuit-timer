@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=57" />
+    <link rel="stylesheet" href="./styles.css?v=58" />
     <title>Circuit Timer</title>
   </head>
   <body>
@@ -21,6 +21,7 @@
         <div class="topbar-actions">
           <button class="topbar-button sound-toggle" id="soundToggle" type="button" aria-pressed="true">Sound On</button>
           <button class="topbar-button history-toggle" id="historyToggle" type="button">History</button>
+          <button class="topbar-button ai-builder-toggle" id="aiBuilderToggle" type="button">AI Builder</button>
         </div>
       </header>
 
@@ -29,6 +30,8 @@
           <span class="status-dot" aria-hidden="true"></span>
           <p class="phase-label" id="phaseLabel" aria-live="polite">READY</p>
         </div>
+        <p class="exercise-label" id="exerciseLabel">Set up your intervals, then press start.</p>
+        <p class="exercise-instructions" id="exerciseInstructions"></p>
         <p class="countdown" id="countdown" aria-live="off">00:30</p>
         <div class="workout-progress" aria-label="Workout time progress">
           <div class="progress-metric">
@@ -124,8 +127,98 @@
           <button class="history-back-button" id="historyBackButton" type="button">Back to Ready</button>
         </div>
       </section>
+
+      <section class="builder-screen" id="builderScreen" aria-labelledby="builderTitle">
+        <div class="builder-heading">
+          <p class="eyebrow">AI CIRCUIT BUILDER</p>
+          <h2 id="builderTitle" tabindex="-1">Build your next circuit.</h2>
+          <p>Describe the workout you want. You can review the exercise order before loading it into the timer.</p>
+        </div>
+
+        <form class="builder-form" id="aiBuilderForm">
+          <div class="builder-grid">
+            <label class="builder-field">
+              <span>Workout duration</span>
+              <select id="aiDuration" name="durationMinutes"></select>
+            </label>
+
+            <label class="builder-field">
+              <span>Work interval</span>
+              <select id="aiWorkSeconds" name="workSeconds">
+                <option value="20">20 seconds</option>
+                <option value="30" selected>30 seconds</option>
+                <option value="40">40 seconds</option>
+                <option value="45">45 seconds</option>
+                <option value="60">60 seconds</option>
+              </select>
+            </label>
+
+            <label class="builder-field">
+              <span>Rest interval</span>
+              <select id="aiRestSeconds" name="restSeconds">
+                <option value="10">10 seconds</option>
+                <option value="15" selected>15 seconds</option>
+                <option value="20">20 seconds</option>
+                <option value="30">30 seconds</option>
+              </select>
+            </label>
+
+            <label class="builder-field">
+              <span>Difficulty</span>
+              <select id="aiDifficulty" name="difficulty">
+                <option value="beginner">Beginner</option>
+                <option value="intermediate" selected>Intermediate</option>
+                <option value="advanced">Advanced</option>
+              </select>
+            </label>
+
+            <fieldset class="builder-field builder-choice-group">
+              <legend>Workout focus</legend>
+              <label><input type="radio" name="focus" value="full-body" checked /> Full body</label>
+              <label><input type="radio" name="focus" value="upper-body" /> Upper body</label>
+              <label><input type="radio" name="focus" value="lower-body" /> Lower body</label>
+              <label><input type="radio" name="focus" value="core" /> Core</label>
+              <label><input type="radio" name="focus" value="cardio" /> Cardio</label>
+            </fieldset>
+
+            <fieldset class="builder-field builder-choice-group">
+              <legend>Available equipment</legend>
+              <label><input type="checkbox" name="equipment" value="bodyweight" checked /> Body weight / no equipment</label>
+              <label><input type="checkbox" name="equipment" value="dumbbells" /> Dumbbells / weights</label>
+              <label><input type="checkbox" name="equipment" value="bands" /> Resistance bands</label>
+            </fieldset>
+          </div>
+
+          <label class="builder-field builder-instructions">
+            <span>Optional instructions</span>
+            <textarea id="aiInstructions" name="instructions" maxlength="240" rows="3" placeholder="Avoid jumping, keep it apartment friendly, or skip a movement..."></textarea>
+            <small id="aiInstructionsCount">0 / 240</small>
+          </label>
+
+          <p class="builder-disclaimer">AI-generated workouts are general fitness suggestions, not medical or professional fitness advice. Stop if something hurts.</p>
+          <p class="builder-error" id="aiBuilderError" role="alert"></p>
+          <button class="primary-button builder-submit" id="generateWorkoutButton" type="submit">Generate Workout with AI</button>
+        </form>
+
+        <div class="builder-preview" id="aiPreview" hidden>
+          <div class="builder-preview-heading">
+            <p class="eyebrow">REVIEW YOUR CIRCUIT</p>
+            <h3 id="aiPreviewTitle">Your AI workout</h3>
+            <p id="aiPreviewMeta"></p>
+          </div>
+          <ol class="builder-exercise-list" id="aiExerciseList"></ol>
+          <p class="builder-safety-note" id="aiSafetyNote"></p>
+          <div class="builder-preview-actions">
+            <button class="secondary-button" id="aiEditButton" type="button">Edit Choices</button>
+            <button class="primary-button" id="loadAiWorkoutButton" type="button">Load into Timer</button>
+          </div>
+        </div>
+
+        <button class="builder-back-button" id="builderBackButton" type="button">Back to Timer</button>
+      </section>
     </main>
 
-    <script src="./app.js?v=57" defer></script>
+    <script src="./ai-config.js?v=58"></script>
+    <script src="./app.js?v=58" defer></script>
   </body>
 </html>
