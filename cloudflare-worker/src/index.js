@@ -50,7 +50,8 @@ export default {
           {
             role: "system",
             content:
-              "You create safe, practical circuit workouts. Return only one JSON object with title, exercises, and safetyNote. " +
+              "You create safe, practical circuit workouts. Return only one JSON object with title, exercises, and safetyNote. " +              "Each exercise is an object with exactly two string fields: name and instructions. " +
+
               "Do not give medical advice. Do not include exercises that require equipment the user did not select. " +
               "Use common exercise names and short, clear instructions. Respect every user instruction unless it conflicts with safety.",
           },
@@ -260,7 +261,7 @@ function validateModelResponse(candidate, input) {
 
   const cleanedExercises = exercises.map((exercise) => {
     const name = cleanText(exercise?.name, 60);
-    const instructions = cleanText(exercise?.instructions, 180);
+    const instructions = cleanText(exercise?.instructions, 180) || cleanText(exercise?.description, 180);
     if (!name || !instructions) throw new Error("The model returned an incomplete exercise.");
     return { name, instructions };
   });
