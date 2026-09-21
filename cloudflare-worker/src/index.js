@@ -34,10 +34,6 @@ export default {
       return json({ error: "Workers AI is not configured for this Worker." }, 500, cors);
     }
 
-    let stage = "run";
-    let rawResponse = null;
-    let rawResponseLength = null;
-    let modelUsage = null;
     try {
       const contentLength = Number(request.headers.get("Content-Length") || 0);
       if (contentLength > 16_000) {
@@ -50,8 +46,8 @@ export default {
           {
             role: "system",
             content:
-              "You create safe, practical circuit workouts. Return only one JSON object with title, exercises, and safetyNote. " +              "Each exercise is an object with exactly two string fields: name and instructions. " +
-
+              "You create safe, practical circuit workouts. Return only one JSON object with title, exercises, and safetyNote. " +
+              "Each exercise is an object with exactly two string fields: name and instructions. " +
               "Do not give medical advice. Do not include exercises that require equipment the user did not select. " +
               "Use common exercise names and short, clear instructions. Respect every user instruction unless it conflicts with safety.",
           },
@@ -64,50 +60,17 @@ export default {
         max_tokens: 1024,
       });
 
-      stage = "parse";
-      modelUsage = modelResponse && modelResponse.usage ? modelResponse.usage : null;
-      const raw = modelResponse?.response ?? modelResponse;
-      if (typeof raw === "string") {
-        rawResponse = raw.slice(0, 300);
-        rawResponseLength = raw.length;
-      } else if (raw) {
-        const serialized = JSON.stringify(raw);
-        rawResponse = serialized.slice(0, 300);
-        rawResponseLength = serialized.length;
-      }
-
       const parsed = parseModelResponse(modelResponse);
-      stage = "validate";
-      const parsedJson = JSON.stringify(parsed);
-      rawResponse = parsedJson.slice(0, 300);
-      rawResponseLength = parsedJson.length;
       const workout = validateModelResponse(parsed, input);
       return json({ workout, model: MODEL }, 200, cors);
     } catch (error) {
-      console.error(
-        "Workout generation failed:",
-        error instanceof Error ? error.message : error,
-        "stage:",
-        stage,
-        "rawLength:",
-        rawResponseLength
-      );
-      const isInput = error instanceof InputError;
-      const status = isInput ? error.status : 502;
-      const message = isInput
-        ? error.message
-        : "The AI could not create a valid workout. Please try again.";
-      const body = { error: message };
-      if (!isInput) {
-        body.diagnostic = {
-          stage,
-          detail: String(error instanceof Error ? error.message : error).slice(0, 300),
-          rawResponse,
-          rawResponseLength,
-          usage: modelUsage,
-        };
-      }
-      return json(body, status, cors);
+      console.error("Workout generation failed:", error instanceof Error ? error.message : error);
+      const status = error instanceof InputError ? error.status : 502;
+      const message =
+        error instanceof InputError
+          ? error.message
+          : "The AI could not create a valid workout. Please try again.";
+      return json({ error: message }, status, cors);
     }
   },
 };
