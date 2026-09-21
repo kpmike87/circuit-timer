@@ -1,4 +1,4 @@
-name = "circuit-timer-ai"
+name = "circuit-timer"
 main = "src/index.js"
 compatibility_date = "2026-09-21"
 workers_dev = true
