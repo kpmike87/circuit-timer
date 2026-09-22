@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=59" />
+    <link rel="stylesheet" href="./styles.css?v=60" />
     <title>Circuit Timer</title>
   </head>
   <body>
@@ -20,10 +20,14 @@
         </div>
         <div class="topbar-actions">
           <button class="topbar-button sound-toggle" id="soundToggle" type="button" aria-pressed="true">Sound On</button>
-          <button class="topbar-button history-toggle" id="historyToggle" type="button">History</button>
-          <button class="topbar-button ai-builder-toggle" id="aiBuilderToggle" type="button">AI Builder</button>
         </div>
       </header>
+
+      <nav class="tab-bar" aria-label="App views">
+        <button class="tab-button" id="timerTab" type="button" aria-current="page">Timer</button>
+        <button class="tab-button" id="aiBuilderToggle" type="button" aria-current="false">AI Builder</button>
+        <button class="tab-button" id="historyToggle" type="button" aria-current="false">History</button>
+      </nav>
 
       <section class="timer-card" aria-labelledby="phaseLabel">
         <div class="phase-row">
@@ -45,6 +49,14 @@
           </div>
         </div>
       </section>
+
+      <div class="ai-loaded-banner" id="aiLoadedBanner" hidden>
+        <div class="ai-loaded-banner-text">
+          <strong id="aiLoadedTitle">AI workout loaded</strong>
+          <span id="aiLoadedMeta"></span>
+        </div>
+        <button class="ai-loaded-clear" id="clearAiWorkoutButton" type="button">Clear AI Workout</button>
+      </div>
 
       <p class="timer-hint" id="timerHint">Set your intervals, then press start.</p>
 
@@ -198,6 +210,10 @@
           <p class="builder-disclaimer">AI-generated workouts are general fitness suggestions, not medical or professional fitness advice. Stop if something hurts.</p>
           <p class="builder-error" id="aiBuilderError" role="alert"></p>
           <button class="primary-button builder-submit" id="generateWorkoutButton" type="submit">Generate Workout with AI</button>
+          <p class="builder-status" id="aiGeneratingStatus" role="status" hidden>
+            <span class="builder-spinner" aria-hidden="true"></span>
+            <span id="aiGeneratingStatusText">Building your circuit…</span>
+          </p>
         </form>
 
         <div class="builder-preview" id="aiPreview" hidden>
@@ -218,7 +234,7 @@
       </section>
     </main>
 
-    <script src="./ai-config.js?v=59"></script>
-    <script src="./app.js?v=59" defer></script>
+    <script src="./ai-config.js?v=60"></script>
+    <script src="./app.js?v=60" defer></script>
   </body>
 </html>
