@@ -12,13 +12,13 @@ export default {
     const cors = getCorsHeaders(origin);
 
     if (request.method === "OPTIONS") {
-      if (origin && !isAllowedOrigin(origin)) {
+      if (!isAllowedOrigin(origin)) {
         return json({ error: "Origin not allowed." }, 403);
       }
       return new Response(null, { status: 204, headers: cors });
     }
 
-    if (origin && !isAllowedOrigin(origin)) {
+    if (!isAllowedOrigin(origin)) {
       return json({ error: "Origin not allowed." }, 403);
     }
 
@@ -29,6 +29,9 @@ export default {
     if (request.method !== "POST") {
       return json({ error: "Use POST for workout generation." }, 405, cors);
     }
+
+    const rateLimitResponse = await checkRateLimits(request, env, cors);
+    if (rateLimitResponse) return rateLimitResponse;
 
     if (!env.AI) {
       return json({ error: "Workers AI is not configured for this Worker." }, 500, cors);
@@ -85,6 +88,29 @@ class InputError extends Error {
 
 function isAllowedOrigin(origin) {
   return ALLOWED_ORIGINS.has(origin);
+}
+
+// Generation is metered and slow, so both limits are checked before the body is
+// read. Limits are per Cloudflare location, so the real ceiling is higher.
+async function checkRateLimits(request, env, cors) {
+  const limiters = [
+    [env.CLIENT_RATE_LIMIT, request.headers.get("CF-Connecting-IP") || "unknown-client"],
+    [env.GLOBAL_RATE_LIMIT, "generate-workout"],
+  ].filter(([limiter]) => Boolean(limiter));
+
+  if (limiters.length === 0) {
+    console.warn("Rate limit bindings are missing; generation requests are not being limited.");
+    return null;
+  }
+
+  const results = await Promise.all(limiters.map(([limiter, key]) => limiter.limit({ key })));
+  if (results.every((result) => result.success)) return null;
+
+  console.warn("Rate limit reached for workout generation.");
+  return json({ error: "Too many workout requests right now. Please wait a minute and try again." }, 429, {
+    ...cors,
+    "Retry-After": "60",
+  });
 }
 
 function getCorsHeaders(origin) {

@@ -81,6 +81,7 @@ const AI_WORKER_URL =
     ? window.CIRCUIT_TIMER_CONFIG.aiWorkerUrl.trim().replace(/\/+$/, "")
     : "";
 const AI_MAX_INSTRUCTIONS_LENGTH = 240;
+const AI_REQUEST_TIMEOUT_MS = 60_000;
 const AI_DIFFICULTY_LABELS = {
   beginner: "Beginner",
   intermediate: "Intermediate",
@@ -204,15 +205,19 @@ function setInputsDisabled(disabled) {
 }
 
 function saveSettings() {
-  localStorage.setItem(
-    "circuit-timer-settings",
-    JSON.stringify({
-      work: workInput.value,
-      rest: restInput.value,
-      totalDuration: totalDurationInput.value,
-      sound: state.soundOn,
-    }),
-  );
+  try {
+    localStorage.setItem(
+      "circuit-timer-settings",
+      JSON.stringify({
+        work: workInput.value,
+        rest: restInput.value,
+        totalDuration: totalDurationInput.value,
+        sound: state.soundOn,
+      }),
+    );
+  } catch {
+    // Storage is unavailable; settings will not persist.
+  }
 }
 
 function loadSettings() {
@@ -224,7 +229,11 @@ function loadSettings() {
     if (saved.totalDuration) totalDurationInput.value = saved.totalDuration;
     if (saved.sound === false) state.soundOn = false;
   } catch {
-    localStorage.removeItem("circuit-timer-settings");
+    try {
+      localStorage.removeItem("circuit-timer-settings");
+    } catch {
+      // Storage is unavailable; there is nothing to clear.
+    }
   }
 }
 
@@ -498,26 +507,49 @@ async function generateAIWorkout(event) {
   generateWorkoutButton.setAttribute("aria-busy", "true");
   generateWorkoutButton.textContent = "Generating...";
 
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
+
   try {
     const response = await fetch(`${AI_WORKER_URL}/api/generate-workout`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
+      signal: controller.signal,
     });
     const body = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(body?.error || "The AI Worker request failed.");
+    if (!response.ok) throw new Error(body?.error || "The workout builder could not be reached.");
 
     const plan = validateAIPlan(body?.workout, request);
     state.plan = plan;
     state.currentExerciseIndex = 0;
     renderAIPlan(plan);
   } catch (error) {
-    showBuilderError(error instanceof Error ? error.message : "The AI Worker request failed.");
+    showBuilderError(describeAIError(error));
   } finally {
+    window.clearTimeout(timeoutId);
     generateWorkoutButton.disabled = false;
     generateWorkoutButton.setAttribute("aria-busy", "false");
     generateWorkoutButton.textContent = "Generate Workout with AI";
   }
+}
+
+function describeAIError(error) {
+  if (error?.name === "AbortError") {
+    return "The workout took too long to build, so the request stopped. Please try again.";
+  }
+
+  // fetch() rejects with a TypeError for connection failures, which is the only
+  // case where the browser message would otherwise reach the user.
+  if (error instanceof TypeError) {
+    return navigator.onLine
+      ? "Could not reach the workout builder. Please try again in a moment. Your timer still works."
+      : "You are offline. The AI builder needs a connection, but your timer still works.";
+  }
+
+  return error instanceof Error && error.message
+    ? error.message
+    : "The workout builder is unavailable right now. Your timer still works.";
 }
 
 function loadAIPlanIntoTimer() {

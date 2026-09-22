@@ -32,7 +32,8 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 ## AI Circuit Builder
 
 The GitHub Pages frontend calls `POST /api/generate-workout` on the separately deployed Worker in `cloudflare-worker/`.
-The Worker uses the `@cf/meta/llama-3.2-3b-instruct` model with JSON mode, validates the response, and returns the exercise order, work/rest intervals, rounds, equipment, and safety note.
+The Worker uses the `@cf/meta/llama-3.1-8b-instruct-fp8` model with JSON mode, validates the response, and returns the exercise order, work/rest intervals, rounds, equipment, and safety note.
+Generation is metered, so the Worker only answers requests from the published site origin and rate limits them. See `cloudflare-worker/README.md` for the limits.
 
 After deploying the Worker, set its HTTPS URL in `ai-config.js`:
 
