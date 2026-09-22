@@ -45,6 +45,13 @@ const aiSafetyNote = document.querySelector("#aiSafetyNote");
 const aiEditButton = document.querySelector("#aiEditButton");
 const loadAiWorkoutButton = document.querySelector("#loadAiWorkoutButton");
 const builderBackButton = document.querySelector("#builderBackButton");
+const timerTab = document.querySelector("#timerTab");
+const aiLoadedBanner = document.querySelector("#aiLoadedBanner");
+const aiLoadedTitle = document.querySelector("#aiLoadedTitle");
+const aiLoadedMeta = document.querySelector("#aiLoadedMeta");
+const clearAiWorkoutButton = document.querySelector("#clearAiWorkoutButton");
+const aiGeneratingStatus = document.querySelector("#aiGeneratingStatus");
+const aiGeneratingStatusText = document.querySelector("#aiGeneratingStatusText");
 const themeColor = document.querySelector('meta[name="theme-color"]');
 
 const COLORS = {
@@ -94,6 +101,14 @@ const AI_FOCUS_LABELS = {
   core: "Core",
   cardio: "Cardio",
 };
+const AI_STATUS_MESSAGES = [
+  "Building your circuit…",
+  "Writing your exercises…",
+  "Finishing up…",
+];
+
+let generationStatusInterval = null;
+let generationStatusIndex = 0;
 
 function parseDuration(input) {
   const seconds = Number(input.value);
@@ -398,17 +413,74 @@ function clearBuilderError() {
   showBuilderError("");
 }
 
+function setView(name) {
+  app.dataset.view = name;
+  syncNavigationState();
+}
+
+function syncNavigationState() {
+  const locked = state.running || state.paused;
+  const view = app.dataset.view;
+  timerTab.setAttribute("aria-current", view === "timer" || view === "summary" ? "page" : "false");
+  aiBuilderToggle.setAttribute("aria-current", view === "builder" ? "page" : "false");
+  historyToggle.setAttribute("aria-current", view === "history" ? "page" : "false");
+  [aiBuilderToggle, historyToggle].forEach((button) => {
+    button.disabled = locked;
+    button.setAttribute("aria-disabled", String(locked));
+  });
+  clearAiWorkoutButton.disabled = locked;
+  clearAiWorkoutButton.setAttribute("aria-disabled", String(locked));
+}
+
+function syncAiLoadedBanner() {
+  const hasPlan = Boolean(state.plan);
+  aiLoadedBanner.hidden = !hasPlan;
+  if (hasPlan) {
+    aiLoadedTitle.textContent = `AI workout loaded · ${state.plan.title}`;
+    aiLoadedMeta.textContent = `${state.plan.exercises.length} exercises · ${state.plan.durationMinutes} minutes`;
+  }
+}
+
+function clearAIPlan() {
+  if (state.running || state.paused) return;
+  state.plan = null;
+  state.currentExerciseIndex = 0;
+  exerciseLabel.textContent = "";
+  exerciseInstructions.textContent = "";
+  syncAiLoadedBanner();
+  returnToReady();
+  saveSettings();
+}
+
+function startGenerationStatus() {
+  generationStatusIndex = 0;
+  aiGeneratingStatusText.textContent = AI_STATUS_MESSAGES[0];
+  aiGeneratingStatus.hidden = false;
+  generationStatusInterval = window.setInterval(() => {
+    generationStatusIndex = (generationStatusIndex + 1) % AI_STATUS_MESSAGES.length;
+    aiGeneratingStatusText.textContent = AI_STATUS_MESSAGES[generationStatusIndex];
+  }, 6000);
+}
+
+function stopGenerationStatus() {
+  if (generationStatusInterval !== null) {
+    window.clearInterval(generationStatusInterval);
+    generationStatusInterval = null;
+  }
+  aiGeneratingStatus.hidden = true;
+}
+
 function openBuilder() {
   if (state.running || state.paused) return;
   populateBuilder();
   clearBuilderError();
-  app.dataset.view = "builder";
+  setView("builder");
   document.title = "AI Circuit Builder - Circuit Timer";
   window.requestAnimationFrame(() => builderScreen.querySelector("h2").focus());
 }
 
 function closeBuilder() {
-  app.dataset.view = "timer";
+  setView("timer");
   updateDisplay();
 }
 
@@ -506,6 +578,7 @@ async function generateAIWorkout(event) {
   generateWorkoutButton.disabled = true;
   generateWorkoutButton.setAttribute("aria-busy", "true");
   generateWorkoutButton.textContent = "Generating...";
+  startGenerationStatus();
 
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
@@ -528,6 +601,7 @@ async function generateAIWorkout(event) {
     showBuilderError(describeAIError(error));
   } finally {
     window.clearTimeout(timeoutId);
+    stopGenerationStatus();
     generateWorkoutButton.disabled = false;
     generateWorkoutButton.setAttribute("aria-busy", "false");
     generateWorkoutButton.textContent = "Generate Workout with AI";
@@ -563,6 +637,7 @@ function loadAIPlanIntoTimer() {
   normalizeTotalDuration();
   returnToReady();
   saveSettings();
+  syncAiLoadedBanner();
 }
 
 function editAIPlan() {
@@ -677,13 +752,13 @@ function renderHistory() {
 function openHistory() {
   if (state.running || state.paused) return;
   renderHistory();
-  app.dataset.view = "history";
+  setView("history");
   document.title = "Workout History - Circuit Timer";
   window.requestAnimationFrame(() => historyTitle.focus());
 }
 
 function closeHistory() {
-  app.dataset.view = "timer";
+  setView("timer");
   updateDisplay();
 }
 
@@ -807,6 +882,7 @@ function startWorkout() {
   setPhase("work");
   state.running = true;
   state.paused = false;
+  syncNavigationState();
   app.dataset.paused = "false";
   state.remainingMs = workSeconds * 1000;
   state.totalElapsedMs = 0;
@@ -833,6 +909,7 @@ function finishWorkout() {
   state.running = false;
   state.paused = false;
   app.dataset.paused = "false";
+  syncNavigationState();
   state.totalElapsedMs = state.totalDurationMs;
   state.totalBeforeCurrentRunMs = state.totalDurationMs;
   state.remainingMs = 0;
@@ -858,6 +935,7 @@ function pauseOrResume() {
     state.paused = true;
     app.dataset.paused = "true";
     themeColor.content = COLORS.paused;
+    syncNavigationState();
     clearInterval(state.intervalId);
     startButton.disabled = false;
     startButton.textContent = "End Workout";
@@ -875,6 +953,7 @@ function pauseOrResume() {
     state.paused = false;
     app.dataset.paused = "false";
     themeColor.content = COLORS[state.phase];
+    syncNavigationState();
     startButton.disabled = true;
     startButton.textContent = "Workout in Progress";
     pauseButton.textContent = "Pause";
@@ -892,6 +971,7 @@ function endWorkout() {
   state.running = false;
   state.paused = false;
   app.dataset.paused = "false";
+  syncNavigationState();
   setInputsDisabled(false);
   showWorkoutSummary();
   releaseWakeLock();
@@ -936,14 +1016,14 @@ function showWorkoutSummary() {
     rounds: completedRounds,
     completionPercent,
   });
-  app.dataset.view = "summary";
+  setView("summary");
   setPhase("complete");
   document.title = "Workout Summary - Circuit Timer";
   window.requestAnimationFrame(() => summaryTitle.focus());
 }
 
 function returnToReady() {
-  app.dataset.view = "timer";
+  setView("timer");
   state.endTime = 0;
   state.remainingMs = (parseDuration(workInput) || 0) * 1000;
   state.totalElapsedMs = 0;
@@ -1071,6 +1151,11 @@ aiInstructions.addEventListener("input", () => {
 });
 aiEditButton.addEventListener("click", editAIPlan);
 loadAiWorkoutButton.addEventListener("click", loadAIPlanIntoTimer);
+timerTab.addEventListener("click", () => {
+  if (state.running || state.paused) return;
+  if (app.dataset.view !== "timer") returnToReady();
+});
+clearAiWorkoutButton.addEventListener("click", clearAIPlan);
 workInput.addEventListener("input", previewWorkTime);
 totalDurationInput.addEventListener("input", previewTotalDuration);
 workInput.addEventListener("change", () => {
@@ -1116,9 +1201,10 @@ if (!settingsAreCleared) normalizeTotalDuration();
 state.remainingMs = (parseDuration(workInput) || 0) * 1000;
 state.totalDurationMs = (parseTotalDuration() || 0) * 60 * 1000;
 updateDisplay();
+syncNavigationState();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=59").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=60").catch(() => {});
   });
 }
