@@ -76,6 +76,7 @@ const state = {
   soundOn: true,
   lastTickSecond: 0,
   plan: null,
+  preAiManualSettings: null,
   currentExerciseIndex: 0,
 };
 
@@ -445,6 +446,14 @@ function clearAIPlan() {
   state.currentExerciseIndex = 0;
   exerciseLabel.textContent = "";
   exerciseInstructions.textContent = "";
+  if (state.preAiManualSettings) {
+    workInput.value = state.preAiManualSettings.work;
+    restInput.value = state.preAiManualSettings.rest;
+    totalDurationInput.value = state.preAiManualSettings.totalDuration;
+    state.preAiManualSettings = null;
+    [workInput, restInput, totalDurationInput].forEach(syncSettingInputWidth);
+    normalizeTotalDuration();
+  }
   syncAiLoadedBanner();
   returnToReady();
   saveSettings();
@@ -627,6 +636,14 @@ function describeAIError(error) {
 
 function loadAIPlanIntoTimer() {
   if (!state.plan) return;
+
+  if (!state.preAiManualSettings) {
+    state.preAiManualSettings = {
+      work: workInput.value,
+      rest: restInput.value,
+      totalDuration: totalDurationInput.value,
+    };
+  }
 
   workInput.value = String(state.plan.workSeconds);
   restInput.value = String(state.plan.restSeconds);
@@ -1194,6 +1211,6 @@ syncNavigationState();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=61").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=62").catch(() => {});
   });
 }
