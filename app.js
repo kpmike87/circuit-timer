@@ -23,7 +23,6 @@ const historyTitle = document.querySelector("#historyTitle");
 const historyCount = document.querySelector("#historyCount");
 const historyList = document.querySelector("#historyList");
 const historyClearButton = document.querySelector("#historyClearButton");
-const historyBackButton = document.querySelector("#historyBackButton");
 const aiBuilderToggle = document.querySelector("#aiBuilderToggle");
 const exerciseLabel = document.querySelector("#exerciseLabel");
 const exerciseInstructions = document.querySelector("#exerciseInstructions");
@@ -44,7 +43,6 @@ const aiExerciseList = document.querySelector("#aiExerciseList");
 const aiSafetyNote = document.querySelector("#aiSafetyNote");
 const aiEditButton = document.querySelector("#aiEditButton");
 const loadAiWorkoutButton = document.querySelector("#loadAiWorkoutButton");
-const builderBackButton = document.querySelector("#builderBackButton");
 const timerTab = document.querySelector("#timerTab");
 const aiLoadedBanner = document.querySelector("#aiLoadedBanner");
 const aiLoadedTitle = document.querySelector("#aiLoadedTitle");
@@ -479,9 +477,10 @@ function openBuilder() {
   window.requestAnimationFrame(() => builderScreen.querySelector("h2").focus());
 }
 
-function closeBuilder() {
-  setView("timer");
-  updateDisplay();
+function goToTimerView() {
+  if (state.running || state.paused) return;
+  if (app.dataset.view === "timer") return;
+  returnToReady();
 }
 
 function validateAIPlan(candidate, request) {
@@ -755,11 +754,6 @@ function openHistory() {
   setView("history");
   document.title = "Workout History - Circuit Timer";
   window.requestAnimationFrame(() => historyTitle.focus());
-}
-
-function closeHistory() {
-  setView("timer");
-  updateDisplay();
 }
 
 function updateDisplay() {
@@ -1125,7 +1119,6 @@ soundToggle.addEventListener("click", () => {
   }
 });
 historyToggle.addEventListener("click", openHistory);
-historyBackButton.addEventListener("click", closeHistory);
 historyClearButton.addEventListener("click", () => {
   if (loadHistory().length === 0) return;
   if (!window.confirm("Delete all workout history? This cannot be undone.")) return;
@@ -1142,7 +1135,6 @@ historyList.addEventListener("click", (event) => {
   renderHistory();
 });
 aiBuilderToggle.addEventListener("click", openBuilder);
-builderBackButton.addEventListener("click", closeBuilder);
 aiBuilderForm.addEventListener("submit", generateAIWorkout);
 aiWorkSeconds.addEventListener("change", syncBuilderDurationOptions);
 aiRestSeconds.addEventListener("change", syncBuilderDurationOptions);
@@ -1151,10 +1143,7 @@ aiInstructions.addEventListener("input", () => {
 });
 aiEditButton.addEventListener("click", editAIPlan);
 loadAiWorkoutButton.addEventListener("click", loadAIPlanIntoTimer);
-timerTab.addEventListener("click", () => {
-  if (state.running || state.paused) return;
-  if (app.dataset.view !== "timer") returnToReady();
-});
+timerTab.addEventListener("click", goToTimerView);
 clearAiWorkoutButton.addEventListener("click", clearAIPlan);
 workInput.addEventListener("input", previewWorkTime);
 totalDurationInput.addEventListener("input", previewTotalDuration);
@@ -1205,6 +1194,6 @@ syncNavigationState();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=60").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=61").catch(() => {});
   });
 }

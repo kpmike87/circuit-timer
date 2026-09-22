@@ -124,13 +124,10 @@ footer,
   background: rgba(255, 255, 255, 0.12);
 }
 
-.app[data-phase="work"] #historyToggle,
-.app[data-phase="rest"] #historyToggle,
-.app[data-paused="true"] #historyToggle,
-.app[data-phase="work"] #aiBuilderToggle,
-.app[data-phase="rest"] #aiBuilderToggle,
-.app[data-paused="true"] #aiBuilderToggle {
-  display: none;
+.app[data-phase="work"] .tab-bar,
+.app[data-phase="rest"] .tab-bar {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(10, 15, 12, 0.55);
 }
 
 .eyebrow {
@@ -465,7 +462,7 @@ footer p {
   display: none;
 }
 
-.app[data-view="summary"] > :not(.summary-screen) {
+.app[data-view="summary"] > :not(.summary-screen):not(.topbar):not(.tab-bar) {
   display: none;
 }
 
@@ -474,11 +471,12 @@ footer p {
   z-index: 2;
   display: flex;
   width: min(100%, 38rem);
-  min-height: calc(100dvh - 2.35rem);
+  min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 1rem;
   margin-inline: auto;
+  overflow-y: auto;
 }
 
 .summary-heading {
@@ -583,7 +581,7 @@ footer p {
   display: none;
 }
 
-.app[data-view="history"] > :not(.history-screen) {
+.app[data-view="history"] > :not(.history-screen):not(.topbar):not(.tab-bar) {
   display: none;
 }
 
@@ -592,11 +590,12 @@ footer p {
   z-index: 2;
   display: flex;
   width: min(100%, 38rem);
-  min-height: calc(100dvh - 2.35rem);
+  min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 1rem;
   margin-inline: auto;
+  overflow-y: auto;
 }
 
 .history-list {
@@ -677,19 +676,11 @@ footer p {
   background: rgba(170, 38, 46, 0.35);
 }
 
-.history-back-button {
-  flex: 1.35;
-  border: 0;
-  color: #122017;
-  background: var(--accent);
-  box-shadow: 0 0.65rem 1.5rem rgba(0, 0, 0, 0.16);
-}
-
 .builder-screen {
   display: none;
 }
 
-.app[data-view="builder"] > :not(.builder-screen) {
+.app[data-view="builder"] > :not(.builder-screen):not(.topbar):not(.tab-bar) {
   display: none;
 }
 
@@ -698,7 +689,7 @@ footer p {
   z-index: 2;
   display: flex;
   width: min(100%, 44rem);
-  min-height: calc(100dvh - 2.35rem);
+  min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 1rem;
@@ -912,19 +903,10 @@ footer p {
   gap: 0.6rem;
 }
 
-.builder-preview-actions button,
-.builder-back-button {
+.builder-preview-actions button {
   min-height: 3.25rem;
   border-radius: 0.9rem;
   font-weight: 850;
-}
-
-.builder-back-button {
-  width: min(100%, 25rem);
-  margin: auto auto 0;
-  border: 1px solid var(--surface-border);
-  color: white;
-  background: rgba(10, 15, 12, 0.3);
 }
 
 @media (min-width: 42rem) {
@@ -968,7 +950,7 @@ footer p {
 
   .app[data-view="summary"] .summary-screen {
     width: min(100%, 44rem);
-    min-height: calc(100dvh - 1.5rem);
+    min-height: 0;
     gap: 0.65rem;
   }
 
@@ -983,7 +965,7 @@ footer p {
 
   .app[data-view="history"] .history-screen {
     width: min(100%, 44rem);
-    min-height: calc(100dvh - 1.5rem);
+    min-height: 0;
     gap: 0.65rem;
   }
 
@@ -1006,7 +988,7 @@ footer p {
 
   .app[data-view="builder"] .builder-screen {
     width: min(100%, 44rem);
-    min-height: calc(100dvh - 1.5rem);
+    min-height: 0;
     gap: 0.65rem;
   }
 
@@ -1330,6 +1312,7 @@ footer p {
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .tab-button[aria-current="page"] {
@@ -1338,8 +1321,10 @@ footer p {
 }
 
 .tab-button:disabled {
-  color: rgba(255, 255, 255, 0.28);
+  opacity: 1;
+  color: rgba(255, 255, 255, 0.45);
   background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
   cursor: not-allowed;
 }
 
@@ -1394,7 +1379,8 @@ footer p {
 }
 
 .ai-loaded-clear:disabled {
-  color: rgba(255, 255, 255, 0.28);
+  opacity: 1;
+  color: rgba(255, 255, 255, 0.45);
   border-style: dashed;
   cursor: not-allowed;
 }
@@ -1443,5 +1429,72 @@ footer p {
 @media (prefers-reduced-motion: reduce) {
   .builder-spinner {
     animation: none;
+  }
+}
+
+@media (max-width: 26rem) {
+  .tab-bar {
+    gap: 0.25rem;
+    padding: 0.3rem;
+  }
+
+  .tab-button {
+    padding-inline: 0.35rem;
+    font-size: 0.76rem;
+    letter-spacing: 0.03em;
+  }
+}
+
+@media (max-width: 21rem) {
+  .tab-button {
+    padding-inline: 0.2rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.01em;
+  }
+}
+
+@media (max-height: 42rem) and (orientation: landscape) {
+  .tab-bar {
+    gap: 0.25rem;
+    padding: 0.25rem;
+  }
+
+  .tab-button {
+    min-height: 2.1rem;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.66rem;
+    letter-spacing: 0.04em;
+  }
+
+  /* The timer view positions its own chrome absolutely, so the nav is pinned
+     into the empty strip above the countdown instead of sitting in the flow. */
+  .app[data-view="timer"] .tab-bar {
+    position: absolute;
+    z-index: 6;
+    top: max(0.7rem, env(safe-area-inset-top));
+    left: 50%;
+    width: auto;
+    margin: 0;
+    transform: translateX(-50%);
+  }
+
+  .app[data-view="timer"]:not([data-phase="idle"]):not([data-phase="complete"]) .tab-bar {
+    display: none;
+  }
+
+  .app[data-view="builder"] .topbar,
+  .app[data-view="history"] .topbar,
+  .app[data-view="summary"] .topbar {
+    position: static;
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .app[data-view="builder"] .topbar-actions,
+  .app[data-view="history"] .topbar-actions,
+  .app[data-view="summary"] .topbar-actions {
+    align-self: auto;
   }
 }
