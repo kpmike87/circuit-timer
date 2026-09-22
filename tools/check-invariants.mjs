@@ -98,6 +98,26 @@ export function checkInvariants(read, exists) {
     check(`#${id} exists in index.html`, htmlIds.has(id));
   }
 
+  // 7. Clearing an AI workout must restore the manual timer settings captured at load.
+  const loadFn = appJs.match(/function loadAIPlanIntoTimer\(\) \{[\s\S]*?\n\}/);
+  const clearFn = appJs.match(/function clearAIPlan\(\) \{[\s\S]*?\n\}/);
+  check("loadAIPlanIntoTimer found", Boolean(loadFn));
+  check("clearAIPlan found", Boolean(clearFn));
+  if (loadFn) {
+    const captureAt = loadFn[0].indexOf("state.preAiManualSettings = {");
+    const overwriteAt = loadFn[0].indexOf("workInput.value = String(state.plan.workSeconds)");
+    check(
+      "AI load captures manual settings before applying plan values",
+      captureAt !== -1 && overwriteAt !== -1 && captureAt < overwriteAt,
+    );
+  }
+  if (clearFn) {
+    const restoreAt = clearFn[0].indexOf("workInput.value = state.preAiManualSettings.work");
+    const saveAt = clearFn[0].lastIndexOf("saveSettings()");
+    check("AI clear restores captured manual settings", restoreAt !== -1);
+    check("AI clear restores before saving settings", restoreAt !== -1 && saveAt !== -1 && restoreAt < saveAt);
+  }
+
   return failures;
 }
 
