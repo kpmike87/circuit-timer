@@ -20,7 +20,7 @@ Generation costs Workers AI neurons and takes 15 to 50 seconds, so the endpoint 
 - `CLIENT_RATE_LIMIT`: 8 requests per 60 seconds per client IP.
 - `GLOBAL_RATE_LIMIT`: 20 requests per 60 seconds for the endpoint as a whole.
 
-Exceeding either limit returns `429` with a `Retry-After` header and a message the app shows directly. Both limits come from the `[[ratelimits]]` bindings in `wrangler.toml` and need no dashboard setup, but they are counted per Cloudflare location, so worldwide traffic can exceed them. They cap bursts rather than daily spend; the Workers AI daily allowance is the real cost ceiling, so add a usage alert if this Worker moves to a paid plan.
+Exceeding either limit returns `429` with a `Retry-After` header and a message the app shows directly. Both limits come from the `[[ratelimits]]` bindings in `wrangler.toml` and need no dashboard setup, but they are a coarse brake rather than exact accounting: they are counted per Cloudflare location, their counters are eventually consistent (so a burst can overshoot the configured numbers before 429 responses begin), and the per-client limit keys on the caller's IP, which many people can share. They slow bursts rather than cap daily spend; the Workers AI daily allowance is the real cost ceiling, so add a usage alert if this Worker moves to a paid plan. Cloudflare's dashboard does not show these limits; Workers Logs are the way to watch the 429 responses.
 
 WAF rate limiting rules cannot protect a `workers.dev` URL, because those rules only apply to a zone you own. Putting the Worker behind a custom domain would allow them as an extra layer.
 
