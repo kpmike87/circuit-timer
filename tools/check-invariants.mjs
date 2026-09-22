@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 export function checkInvariants(read, exists) {
   const failures = [];
   const check = (label, ok, detail = "") => {
-    if (!ok) failures.push(detail ? `${label} ? ${detail}` : label);
+    if (!ok) failures.push(detail ? `${label}: ${detail}` : label);
   };
 
   const html = read("index.html");
