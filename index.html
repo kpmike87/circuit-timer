@@ -7,8 +7,12 @@
     <meta name="description" content="A simple work and rest interval timer for circuit training." />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=60" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon-180.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Circuit" />
+    <link rel="stylesheet" href="./styles.css?v=61" />
     <title>Circuit Timer</title>
   </head>
   <body>
@@ -37,7 +41,7 @@
         <p class="exercise-label" id="exerciseLabel">Set up your intervals, then press start.</p>
         <p class="exercise-instructions" id="exerciseInstructions"></p>
         <p class="countdown" id="countdown" aria-live="off">00:30</p>
-        <div class="workout-progress" aria-label="Workout time progress">
+        <div class="workout-progress" role="group" aria-label="Workout time progress">
           <div class="progress-metric">
             <span>ELAPSED</span>
             <strong id="totalTime">00:00</strong>
@@ -109,7 +113,7 @@
           <strong id="summaryTotalTime">00:00</strong>
         </div>
 
-        <div class="summary-stats" aria-label="Workout statistics">
+        <div class="summary-stats" role="group" aria-label="Workout statistics">
           <article class="summary-stat">
             <span>Workout Time</span>
             <strong id="summaryWorkoutTime">00:00</strong>
@@ -133,10 +137,9 @@
           <h2 id="historyTitle" tabindex="-1">Past Workouts</h2>
           <p id="historyCount">No workouts logged yet.</p>
         </div>
-        <div class="history-list" id="historyList" aria-label="Workout history entries"></div>
+        <div class="history-list" id="historyList" role="group" aria-label="Workout history entries"></div>
         <div class="history-actions">
           <button class="history-clear-button" id="historyClearButton" type="button">Clear History</button>
-          <button class="history-back-button" id="historyBackButton" type="button">Back to Ready</button>
         </div>
       </section>
 
@@ -229,12 +232,10 @@
             <button class="primary-button" id="loadAiWorkoutButton" type="button">Load into Timer</button>
           </div>
         </div>
-
-        <button class="builder-back-button" id="builderBackButton" type="button">Back to Timer</button>
       </section>
     </main>
 
-    <script src="./ai-config.js?v=60"></script>
-    <script src="./app.js?v=60" defer></script>
+    <script src="./ai-config.js?v=61"></script>
+    <script src="./app.js?v=61" defer></script>
   </body>
 </html>

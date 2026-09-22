@@ -1,0 +1,26 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check JavaScript
+        run: |
+          node --check app.js
+          node --check service-worker.js
+          node --check ai-config.js
+          cp cloudflare-worker/src/index.js "$RUNNER_TEMP/worker-index.mjs"
+          node --check "$RUNNER_TEMP/worker-index.mjs"
+      - name: Check asset-version and DOM invariants
+        run: node tools/check-invariants.mjs
