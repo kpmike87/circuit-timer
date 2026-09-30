@@ -118,6 +118,35 @@ export function checkInvariants(read, exists) {
     check("AI clear restores before saving settings", restoreAt !== -1 && saveAt !== -1 && restoreAt < saveAt);
   }
 
+  // 8. Mobile usability and workout-control hierarchy.
+  const css = read("styles.css");
+  check("setup inputs have a taller touch row", /\.input-shell input \{[\s\S]*?min-height: 2\.75rem/.test(css));
+  check("landscape setup inputs are enlarged", /\.setup-card \.input-shell input \{[\s\S]*?min-height: 2\.2rem/.test(css));
+  check(
+    "Pause/Resume get the primary accent treatment",
+    /\.app\[data-paused="true"\] #pauseButton \{[\s\S]*?background: var\(--accent\)/.test(css),
+  );
+  check(
+    "End Workout uses the muted danger style while paused",
+    /\.app\[data-paused="true"\] #startButton \{[\s\S]*?background: rgba\(170, 38, 46, 0\.22\)/.test(css),
+  );
+  check(
+    "the actionable workout control gets the wide column",
+    css.includes('.app[data-paused="true"] .controls {') && css.includes("grid-template-columns: 1fr 1.35fr;"),
+  );
+  check(
+    "AI banner becomes a positioned chip in short landscape",
+    css.includes('.app[data-phase="idle"][data-view="timer"] .ai-loaded-banner {'),
+  );
+  check(
+    "AI banner hides during an active workout in short landscape",
+    css.includes(':not([data-phase="complete"]) .ai-loaded-banner'),
+  );
+  check(
+    "Clear AI Workout disables while a workout is running or paused",
+    appJs.includes("clearAiWorkoutButton.disabled = locked"),
+  );
+
   return failures;
 }
 

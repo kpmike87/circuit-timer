@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   color-scheme: dark;
   font-family:
     Inter, ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -149,7 +149,7 @@ h1 {
 .timer-card {
   display: grid;
   flex: 1;
-  min-height: 15rem;
+  min-height: 13.5rem;
   place-content: center;
   text-align: center;
 }
@@ -288,7 +288,7 @@ h1 {
 }
 
 .input-group {
-  padding: 0.9rem 1rem;
+  padding: 0.7rem 0.9rem;
   border: 1px solid var(--surface-border);
   border-radius: 1rem;
   background: rgba(10, 15, 12, 0.27);
@@ -323,9 +323,10 @@ h1 {
 }
 
 .input-shell input {
-  width: var(--input-width, 2ch);
+  width: calc(var(--input-width, 2ch) + 0.3ch);
   min-width: 0;
-  padding: 0;
+  min-height: 2.75rem;
+  padding: 0.1rem 0.12rem;
   border: 0;
   outline: 0;
   color: white;
@@ -411,26 +412,28 @@ h1 {
   box-shadow: 0 0.45rem 1.1rem rgba(0, 0, 0, 0.18);
 }
 
+/* The actionable control gets the primary accent while a workout is live
+   (Pause) or paused (Resume); End Workout becomes a muted danger style. */
 .app[data-paused="false"][data-phase="work"] #pauseButton,
-.app[data-paused="false"][data-phase="rest"] #pauseButton {
-  border-color: #b3bac0;
-  color: white;
-  background: #7b8187;
-  box-shadow: 0 0.5rem 1.2rem rgba(0, 0, 0, 0.24);
+.app[data-paused="false"][data-phase="rest"] #pauseButton,
+.app[data-paused="true"] #pauseButton {
+  border: 0;
+  color: #122017;
+  background: var(--accent);
+  box-shadow: 0 0.65rem 1.5rem rgba(0, 0, 0, 0.16);
 }
 
 .app[data-paused="true"] #startButton {
-  border-color: #df4b54;
-  color: white;
-  background: #bd2732;
-  box-shadow: 0 0.5rem 1.2rem rgba(189, 39, 50, 0.2);
+  border: 1px solid rgba(223, 75, 84, 0.55);
+  color: #ffd9dc;
+  background: rgba(170, 38, 46, 0.22);
+  box-shadow: none;
 }
 
-.app[data-paused="true"] #pauseButton {
-  border-color: #25b971;
-  color: white;
-  background: #087a45;
-  box-shadow: 0 0.5rem 1.2rem rgba(8, 122, 69, 0.22);
+.app[data-paused="false"][data-phase="work"] .controls,
+.app[data-paused="false"][data-phase="rest"] .controls,
+.app[data-paused="true"] .controls {
+  grid-template-columns: 1fr 1.35fr;
 }
 
 button:focus-visible,
@@ -915,7 +918,7 @@ footer p {
   }
 
   .timer-card {
-    min-height: 20rem;
+    min-height: 18rem;
   }
 }
 
@@ -929,6 +932,7 @@ footer p {
   }
 
   .input-shell input {
+    min-height: 2.5rem;
     font-size: 1.4rem;
   }
 }
@@ -951,7 +955,7 @@ footer p {
   .app[data-view="summary"] .summary-screen {
     width: min(100%, 44rem);
     min-height: 0;
-    gap: 0.65rem;
+    gap: 0.5rem;
   }
 
   .app[data-view="history"] {
@@ -975,6 +979,20 @@ footer p {
 
   .app[data-view="history"] .history-actions button {
     min-height: 3.1rem;
+  }
+
+  /* Bound these views to the viewport so they scroll internally; that keeps
+     the sticky Back to Ready / Clear History actions in view. */
+  .app[data-view="summary"],
+  .app[data-view="history"],
+  .app[data-view="builder"] {
+    height: 100dvh;
+  }
+
+  .app[data-view="summary"] .summary-ready-button,
+  .app[data-view="history"] .history-actions {
+    position: sticky;
+    bottom: 0.5rem;
   }
 
   .app[data-view="builder"] {
@@ -1002,7 +1020,7 @@ footer p {
   }
 
   .summary-heading h2 {
-    font-size: clamp(1.8rem, 7vh, 2.5rem);
+    font-size: clamp(1.6rem, 6.5vh, 2.15rem);
   }
 
   .summary-heading > p:last-child {
@@ -1013,12 +1031,12 @@ footer p {
   .summary-highlight {
     width: min(100%, 28rem);
     margin-inline: auto;
-    padding: 0.55rem 1rem;
+    padding: 0.45rem 0.9rem;
     border-radius: 0.85rem;
   }
 
   .summary-highlight strong {
-    font-size: clamp(2.25rem, 11vh, 3.25rem);
+    font-size: clamp(2rem, 10vh, 2.75rem);
   }
 
   .summary-stats {
@@ -1027,7 +1045,7 @@ footer p {
   }
 
   .summary-stat {
-    padding: 0.5rem 0.65rem;
+    padding: 0.45rem 0.6rem;
   }
 
   .summary-stat span {
@@ -1042,7 +1060,7 @@ footer p {
 
   .summary-ready-button {
     width: min(48vw, 20rem);
-    min-height: 3.1rem;
+    min-height: 2.9rem;
     border-radius: 0.9rem;
   }
 
@@ -1168,26 +1186,28 @@ footer p {
   }
 
   .setup-card .input-group {
-    padding: 0.28rem 0.4rem;
+    padding: 0.42rem 0.45rem;
     border-radius: 0.56rem;
   }
 
   .setup-card .input-group label {
-    min-height: 1.05rem;
+    min-height: 1.15rem;
     margin-bottom: 0.08rem;
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     font-weight: 900;
     line-height: 1.05rem;
     white-space: nowrap;
   }
 
   .setup-card .input-group:nth-child(-n + 2) label {
-    font-size: 0.82rem;
+    font-size: 0.86rem;
   }
 
   .setup-card .input-shell input {
-    width: var(--input-width, 2ch);
-    font-size: 1rem;
+    width: calc(var(--input-width, 2ch) + 0.3ch);
+    min-height: 2.2rem;
+    padding: 0.05rem 0.1rem;
+    font-size: 1.3rem;
     line-height: 1.05;
   }
 
@@ -1196,7 +1216,7 @@ footer p {
   }
 
   .setup-card .input-shell span {
-    font-size: 0.78rem;
+    font-size: 0.82rem;
   }
 
   .controls {
@@ -1241,7 +1261,7 @@ footer p {
   }
 
   .app[data-phase="idle"][data-view="timer"] .timer-hint {
-    top: 32%;
+    top: 29%;
     bottom: auto;
     text-align: center;
     transform: translateY(-50%);
@@ -1249,22 +1269,22 @@ footer p {
 
   .app[data-phase="idle"][data-view="timer"] .setup-card {
     top: auto;
-    bottom: max(8.35rem, calc(env(safe-area-inset-bottom) + 8.1rem));
+    bottom: max(8.8rem, calc(env(safe-area-inset-bottom) + 8.55rem));
     gap: 0.5rem;
     transform: none;
   }
 
   .app[data-phase="idle"][data-view="timer"] .setup-card .input-group {
-    padding: 0.5rem 0.35rem;
+    padding: 0.5rem 0.45rem;
   }
 
   .app[data-phase="idle"][data-view="timer"] .controls {
-    bottom: max(3rem, calc(env(safe-area-inset-bottom) + 2rem));
+    bottom: max(2.6rem, calc(env(safe-area-inset-bottom) + 1.6rem));
   }
 
   .app[data-phase="idle"][data-view="timer"] .error-message {
     top: auto;
-    bottom: max(12.6rem, calc(env(safe-area-inset-bottom) + 12.35rem));
+    bottom: max(13.5rem, calc(env(safe-area-inset-bottom) + 13.25rem));
   }
 
   footer {
@@ -1346,6 +1366,13 @@ footer p {
   display: none;
 }
 
+/* While a workout is running or paused the banner steps aside everywhere:
+   the exercise readout carries the plan, and Clear is disabled until the
+   workout ends. It returns when the timer is back to idle. */
+.app[data-view="timer"]:not([data-phase="idle"]):not([data-phase="complete"]) .ai-loaded-banner {
+  display: none;
+}
+
 .ai-loaded-banner-text {
   display: flex;
   flex-direction: column;
@@ -1417,12 +1444,18 @@ footer p {
 
 @media (max-width: 24rem) {
   .ai-loaded-banner {
-    align-items: stretch;
-    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .ai-loaded-banner-text strong {
+    font-size: 0.8rem;
   }
 
   .ai-loaded-clear {
-    width: 100%;
+    min-height: 2.2rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.7rem;
   }
 }
 
@@ -1479,6 +1512,37 @@ footer p {
   }
 
   .app[data-view="timer"]:not([data-phase="idle"]):not([data-phase="complete"]) .tab-bar {
+    display: none;
+  }
+
+  /* With an AI plan loaded, the banner becomes a slim chip above the
+     controls while idle, and stays out of the workout readout entirely
+     once the workout is running or paused. */
+  .app[data-phase="idle"][data-view="timer"] .ai-loaded-banner {
+    position: absolute;
+    z-index: 3;
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: max(6rem, calc(env(safe-area-inset-bottom) + 5.75rem));
+    left: auto;
+    width: min(41vw, 23rem);
+    margin: 0;
+    padding: 0.3rem 0.5rem;
+    gap: 0.5rem;
+    border-radius: 0.6rem;
+  }
+
+  .app[data-phase="idle"][data-view="timer"] .ai-loaded-banner-text span {
+    display: none;
+  }
+
+  .app[data-phase="idle"][data-view="timer"] .ai-loaded-clear {
+    min-height: 1.9rem;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.68rem;
+  }
+
+  .app[data-phase="idle"][data-view="timer"]:has(.ai-loaded-banner:not([hidden])) .timer-hint,
+  .app[data-phase="idle"][data-view="timer"]:has(.error-message:not(:empty)) .timer-hint {
     display: none;
   }
 
