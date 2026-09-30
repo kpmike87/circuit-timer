@@ -1,4 +1,4 @@
-﻿const app = document.querySelector(".app");
+const app = document.querySelector(".app");
 const workInput = document.querySelector("#workTime");
 const restInput = document.querySelector("#restTime");
 const totalDurationInput = document.querySelector("#totalDuration");
@@ -1211,6 +1211,6 @@ syncNavigationState();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=62").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=63").catch(() => {});
   });
 }
