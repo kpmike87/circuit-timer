@@ -34,3 +34,12 @@ The design draws on the [2026 ACSM resistance-training position stand](https://p
 Run `node --test tools/workout-generator.test.mjs`, `node tools/check-invariants.mjs`, and the syntax checks in `.github/workflows/checks.yml`. The tests use mocked inference: they validate the contract, eligibility, coverage, restrictions, exact durations, backwards compatibility, and timer catch-up, not live model reliability.
 
 Worker source deploys from `cloudflare-worker/` with the existing Workers Builds integration and `npx wrangler deploy`. GitHub Pages serves the frontend. Check the PR's build/check results for the actual current deployment status; the repository alone does not prove the dashboard integration remains enabled. Before release, test the preview Worker with real generation and exercise the builder → review → timer flow on mobile and desktop. Merge the reviewed PR to publish through the existing integrations, then verify the production flow. If the Worker build does not run, use authenticated Cloudflare access to inspect/fix its Git integration. No API token belongs in this repository.
+
+
+## Exercise pictures (v65)
+
+The existing controls now lead to picture-backed review cards and a timer image. A local map in `exercise-media.js` resolves all 51 catalog IDs to original two-position SVG movement diagrams. Picture buttons open a native dialog with the image and written instructions. Opening a picture pauses a running workout; closing it does not automatically resume. The user presses Resume when ready. Unknown or old responses without IDs keep their text display without a guessed picture. Failed images hide while instructions remain available.
+
+`tools/generate-exercise-media.mjs` owns the editable diagrams and media map. `assets/exercises/README.md` documents their scope; `assets/exercises/preview.png` shows four actual assets. These are static schematics, not photographs or animations. No external image service, API key, or model change is needed. The v65 service worker precaches the map and all pictures, about 260 KB of SVG data, for offline use.
+
+The expanded 20-test suite checks every catalog/media match, local-only URLs, fallback behavior, image rotation, pause-on-inspection, and offline cache coverage. Existing workout generation, protections, and rollout compatibility tests remain in place. Local SVG contact sheets were visually inspected; browser UI/viewport verification still requires a permitted preview environment.
