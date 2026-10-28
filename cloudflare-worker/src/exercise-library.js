@@ -94,22 +94,52 @@ export function excludedTags(instructions) {
   return excluded;
 }
 
-export function getExerciseContext(input) {
-  const patterns = FOCUS_PATTERNS[input.focus];
+// Match requested targets to primary muscles, so biceps-only does not admit
+// back rows merely because biceps appear as a supporting muscle.
+export const MUSCLE_GROUPS = Object.freeze({
+  chest: ["Chest"], back: ["Back", "Upper back"], shoulders: ["Shoulders", "Rear shoulders"],
+  biceps: ["Biceps"], triceps: ["Triceps"], quads: ["Quads"], hamstrings: ["Hamstrings"],
+  glutes: ["Glutes", "Side glutes"], calves: ["Calves"], core: ["Abs", "Obliques", "Back stabilizers"],
+});
+
+export function matchesMuscleGroup(item, group) {
+  return MUSCLE_GROUPS[group]?.includes(item?.muscles?.[0]) || false;
+}
+
+export function getAvailableExercises(input) {
   const excluded = excludedTags(input.instructions);
-  const eligible = EXERCISES.filter((item) => item.level <= LEVELS[input.difficulty]
+  return EXERCISES.filter((item) => item.level <= LEVELS[input.difficulty]
     && item.equipment.every((equipment) => input.equipment.includes(equipment))
-    && patterns.includes(item.pattern) && !item.tags.some((tag) => excluded.has(tag)));
-  const requiredPatterns = patterns.slice(0, MINIMUM_PATTERNS[input.focus])
+    && !item.tags.some((tag) => excluded.has(tag)));
+}
+
+export function getExerciseContext(input) {
+  const intent = input.instructionIntent;
+  const targetMuscles = intent?.targetMuscles || [];
+  const requiredIds = intent?.requiredExerciseIds || [];
+  const excludedIds = new Set(intent?.excludedExerciseIds || []);
+  const available = getAvailableExercises(input).filter((item) => !excludedIds.has(item.id));
+  const targetPatterns = [...new Set(available.filter((item) => targetMuscles.some((group) => matchesMuscleGroup(item, group))).map((item) => item.pattern))];
+  const namedPatterns = available.filter((item) => requiredIds.includes(item.id)).map((item) => item.pattern);
+  const patterns = intent?.targetMode === "only" ? targetPatterns
+    : [...new Set([...FOCUS_PATTERNS[input.focus], ...namedPatterns, ...(intent?.targetMode === "emphasize" ? targetPatterns : [])])];
+  const eligible = available.filter((item) => patterns.includes(item.pattern)
+    && (intent?.targetMode !== "only" || targetMuscles.some((group) => matchesMuscleGroup(item, group))));
+  // Reserve capacity for explicit text requests before filling preset coverage.
+  const patternCapacity = intent ? Math.max(0, input.exerciseCount - targetMuscles.length * (intent.targetMode === "emphasize" ? 2 : 1) - requiredIds.length) : input.exerciseCount;
+  const requiredPatterns = (intent?.targetMode === "only" ? [] : FOCUS_PATTERNS[input.focus].slice(0, MINIMUM_PATTERNS[input.focus]))
     .filter((pattern) => eligible.some((item) => item.pattern === pattern))
-    .slice(0, input.exerciseCount);
+    .slice(0, patternCapacity);
   const requiredEquipment = input.equipment.filter((equipment) => equipment !== "bodyweight"
     && eligible.some((item) => item.equipment.includes(equipment)));
   const counts = new Map();
   eligible.forEach((item) => counts.set(item.pattern, (counts.get(item.pattern) || 0) + 1));
   let maxPatternRepeat = Math.max(1, Math.ceil(input.exerciseCount / Math.max(1, requiredPatterns.length)));
+  const namedCounts = new Map();
+  for (const item of eligible.filter((entry) => requiredIds.includes(entry.id))) namedCounts.set(item.pattern, (namedCounts.get(item.pattern) || 0) + 1);
+  maxPatternRepeat = Math.max(maxPatternRepeat, ...namedCounts.values());
   while ([...counts.values()].reduce((total, count) => total + Math.min(count, maxPatternRepeat), 0) < Math.min(input.exerciseCount, eligible.length)) maxPatternRepeat++;
-  return { eligible, requiredPatterns, requiredEquipment, excluded, maxPatternRepeat };
+  return { eligible, requiredPatterns, requiredEquipment, excluded: excludedTags(input.instructions), maxPatternRepeat, targetMuscles, requiredIds };
 }
 
 export const EFFORT_GUIDANCE = Object.freeze({
@@ -119,7 +149,7 @@ export const EFFORT_GUIDANCE = Object.freeze({
 });
 
 export function effortGuidanceFor(input) {
-  if (input.focus !== "cardio") return EFFORT_GUIDANCE[input.difficulty];
+  if (input.focus !== "cardio" || input.instructionIntent?.targetMode === "only") return EFFORT_GUIDANCE[input.difficulty];
   return {
     beginner: "Build a steady pace while keeping movement controlled and breathing comfortable enough to talk. Slow down or take extra rest as needed.",
     intermediate: "Aim for a brisk, controlled pace: talking should be possible but singing difficult. Slow down during recovery and take extra rest as needed.",
