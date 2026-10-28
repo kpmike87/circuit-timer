@@ -477,7 +477,9 @@ export function validateModelResponse(candidate, input) {
     }
   }
 
-  if (context.targetMuscles.some((group) => !selected.some((item) => matchesMuscleGroup(item, group)))
+  if (context.targetMuscles.some((group) => selected.filter((item) => matchesMuscleGroup(item, group)).length
+      < Math.min(input.instructionIntent?.targetMode === "emphasize" ? 2 : 1,
+        context.eligible.filter((item) => matchesMuscleGroup(item, group)).length))
     || context.requiredIds.some((id) => !ids.includes(id))) {
     throw new Error("The model omitted a requested muscle group or named exercise.");
   }
