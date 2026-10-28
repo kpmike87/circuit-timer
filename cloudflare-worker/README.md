@@ -6,7 +6,7 @@ This Worker generates structured circuit plans for the GitHub Pages Circuit Time
 
 - Worker name: `circuit-timer`
 - AI binding: `AI`
-- Model: `@cf/meta/llama-3.1-8b-instruct-fp8`
+- Model: `@cf/meta/llama-3.1-8b-instruct`
 - API route: `POST /api/generate-workout`
 - Allowed browser origin: `https://kpmike87.github.io`
 
@@ -33,3 +33,13 @@ npx wrangler deploy
 ```
 
 For Cloudflare Workers Builds, use this directory as the root directory and `npx wrangler deploy` as the deploy command. No build output directory is required.
+
+## Selection reliability and diagnostics
+
+The model is explicitly listed as supporting [Workers AI JSON Mode](https://developers.cloudflare.com/workers-ai/features/json-mode/). The Worker assigns movement-category slots and supplies a JSON schema with only eligible IDs for each slot. AI still chooses the exercises and receives all free-text preferences. Runtime validation enforces distinct IDs, coverage, eligibility and repetition limits. One invalid response gets one corrective inference attempt; explicit inability to comply (422) and provider failures (503) are not retried. No unchecked or generic fallback plan is returned.
+
+Both attempts share a 50-second response budget, within the frontend's existing 60-second timeout. Timing out the response does not cancel an already submitted provider inference. Inference cost can be up to two calls per admitted request; existing HTTP rate limits are unchanged.
+
+Error JSON includes a code and requestId. `AI_INVALID_SELECTION` (502) means both selections failed validation; `AI_SERVICE_UNAVAILABLE` (503) means inference threw; `AI_TIMEOUT` (503) means the response budget expired. Logs contain diagnostic codes and correlation IDs, not raw prompts, model responses, user instructions, or provider exception text. Check Workers logs and Workers AI usage for account-level failures.
+
+The reported v65 error could originate from inference, parsing, or selection validation because all three previously shared one message. The specific production exception has not been observed; this repair targets the source-level reliability gaps rather than claiming a confirmed live root cause.
