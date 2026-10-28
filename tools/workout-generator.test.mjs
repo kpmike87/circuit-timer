@@ -421,6 +421,26 @@ test("free-text interpretation runs once even when exercise selection needs a co
   assert.ok((await response.json()).workout.exercises.every((item) => item.muscles[0] === "Chest"));
 });
 
+test("multiple requested targets and named exercises remain required by runtime validation", () => {
+  for (const targetMuscles of [["chest", "back"], ["biceps", "triceps"], ["quads", "glutes"], ["core", "back"]]) {
+    const input = resolvedInput({ ...base, difficulty: "advanced", equipment: ["dumbbells"], instructions: "Target these muscle groups" }, intent({ targetMode: "only", targetMuscles }));
+    const plan = validateModelResponse(slotSelection(input), input);
+    for (const group of targetMuscles) assert.ok(plan.exercises.some((item) => matchesMuscleGroup(item, group)));
+    assert.ok(plan.exercises.every((item) => targetMuscles.some((group) => matchesMuscleGroup(item, group))));
+  }
+  const requiredExerciseIds = ["bw-knee-push-up", "bw-push-up", "bw-close-push-up"];
+  const named = resolvedInput({ ...base, difficulty: "advanced", instructions: "Include these three push-ups" }, intent({ requiredExerciseIds }));
+  const plan = validateModelResponse(slotSelection(named), named);
+  assert.ok(requiredExerciseIds.every((id) => plan.exercises.some((item) => item.id === id)));
+  const emphasized = resolvedInput({ ...base, equipment: ["dumbbells"], instructions: "Extra chest" }, intent({ targetMode: "emphasize", targetMuscles: ["chest"] }));
+  const invalid = slotSelection(emphasized);
+  const matchingKeys = Object.keys(invalid.choices).filter((key) => matchesMuscleGroup(EXERCISES.find((item) => item.id === invalid.choices[key]), "chest"));
+  const ids = Object.values(invalid.choices);
+  const other = getExerciseContext(emphasized).eligible.find((item) => !matchesMuscleGroup(item, "chest") && !ids.includes(item.id));
+  ids[Object.keys(invalid.choices).indexOf(matchingKeys[0])] = other.id;
+  assert.throws(() => validateModelResponse({ title: "Ignored extra focus", exerciseIds: ids }, emphasized));
+});
+
 // Run actual frontend functions without needing a browser or duplicating their
 // logic. The cut points are declarations, not copied implementations.
 const appSource = readFileSync(new URL("../app.js", import.meta.url), "utf8");
