@@ -26,6 +26,7 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Sound cues with a mute toggle: distinct tones for work and rest, countdown ticks for the final three seconds, a completion chime, and vibration on supporting devices
 - Workout history page: finished workouts are saved on your device with date, durations, rounds, and completion, plus per-entry delete and clear-all
 - AI Circuit Builder: create a structured, reviewable circuit through a Cloudflare Worker using Workers AI, then load it directly into the timer
+- Exercise pictures: 51 local movement diagrams in workout review and the timer, with a larger view that pauses the workout
 - Device-local saved settings
 - Installable and available offline as a Progressive Web App
 

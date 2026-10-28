@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Circuit" />
-    <link rel="stylesheet" href="./styles.css?v=64" />
+    <link rel="stylesheet" href="./styles.css?v=65" />
     <title>Circuit Timer</title>
   </head>
   <body>
@@ -40,6 +40,10 @@
         </div>
         <p class="exercise-label" id="exerciseLabel">Set up your intervals, then press start.</p>
         <p class="exercise-instructions" id="exerciseInstructions"></p>
+        <button class="exercise-image-button timer-exercise-image" id="exerciseImageButton" type="button" hidden>
+          <img id="exerciseImage" width="560" height="310" alt="" decoding="async" />
+          <span class="exercise-image-hint">View picture · pauses timer</span>
+        </button>
         <p class="countdown" id="countdown" aria-live="off">00:30</p>
         <div class="workout-progress" role="group" aria-label="Workout time progress">
           <div class="progress-metric">
@@ -237,7 +241,17 @@
       </section>
     </main>
 
-    <script src="./ai-config.js?v=64"></script>
-    <script src="./app.js?v=64" defer></script>
+    <dialog class="exercise-image-dialog" id="exerciseImageDialog" aria-labelledby="exerciseImageDialogTitle">
+      <div class="exercise-image-dialog-header">
+        <h2 id="exerciseImageDialogTitle">Exercise picture</h2>
+        <button id="exerciseImageDialogClose" type="button">Close picture</button>
+      </div>
+      <p class="exercise-image-dialog-status" id="exerciseImageDialogStatus" role="status"></p>
+      <img id="exerciseImageDialogImage" width="560" height="310" alt="" />
+      <p id="exerciseImageDialogInstructions"></p>
+    </dialog>
+    <script src="./exercise-media.js?v=65"></script>
+    <script src="./ai-config.js?v=65"></script>
+    <script src="./app.js?v=65" defer></script>
   </body>
 </html>
