@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import worker, { validateRequest, buildPrompt, validateModelResponse, buildSelectionSlots, buildResponseFormat } from "../cloudflare-worker/src/index.js";
-import { EXERCISES, getExerciseContext, excludedTags } from "../cloudflare-worker/src/exercise-library.js";
+import worker, { validateRequest, buildPrompt, validateModelResponse, buildSelectionSlots, buildResponseFormat, finalizeSelection } from "../cloudflare-worker/src/index.js";
+import { EXERCISES, getExerciseContext, excludedTags, getAvailableExercises, matchesMuscleGroup } from "../cloudflare-worker/src/exercise-library.js";
 
 const base = { planVersion: 2, durationMinutes: 17, workSeconds: 30, restSeconds: 30,
   difficulty: "intermediate", focus: "full-body", equipment: ["bodyweight"], instructions: "" };
@@ -280,9 +280,165 @@ test("inference attempts share one deadline inside the browser request timeout",
   assert.equal(calls, 2);
 });
 
+function intent(overrides = {}) {
+  return { targetMode: "preset", targetMuscles: [], requiredExerciseIds: [], excludedExerciseIds: [], cannotComply: false, ...overrides };
+}
+
+function resolvedInput(body, interpreted) {
+  const input = validateRequest(body, true);
+  input.instructionIntent = interpreted;
+  return finalizeSelection(input);
+}
+
+test("exact chest-only example is interpreted before selection and overrides a conflicting preset", async () => {
+  const body = { ...base, instructions: "Give me one that just focuses on chest" };
+  const interpreted = intent({ targetMode: "only", targetMuscles: ["chest"] });
+  const expected = resolvedInput(body, interpreted);
+  assert.equal(expected.exerciseCount, 2);
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async (_model, options) => {
+    calls++;
+    if (calls === 1) {
+      assert.equal(options.response_format.json_schema.properties.targetMode.type, "string");
+      assert.equal(JSON.parse(options.messages[1].content).instructions, body.instructions);
+      return { response: interpreted };
+    }
+    const slots = options.response_format.json_schema.properties.choices.properties;
+    for (const slot of Object.values(slots)) for (const id of slot.enum.filter(Boolean))
+      assert.ok(matchesMuscleGroup(EXERCISES.find((item) => item.id === id), "chest"));
+    assert.ok(options.messages[1].content.includes("intentional muscle-focused circuit"));
+    return { response: slotSelection(expected) };
+  };
+  const response = await worker.fetch(request(body), env);
+  assert.equal(response.status, 200);
+  assert.equal(calls, 2);
+  const plan = (await response.json()).workout;
+  assert.ok(plan.exercises.every((item) => item.muscles[0] === "Chest"));
+  assert.ok(plan.coverageNotes.some((note) => note.includes("Requested focus: chest")));
+  assert.ok(!plan.coverageNotes.some((note) => note.includes("full-body coverage") || note.includes("loaded row")));
+  assert.equal(plan.totalIntervals, 17);
+});
+
+test("muscle-only requests stay targeted across every preset, level and selected equipment", () => {
+  for (const focus of ["full-body", "upper-body", "lower-body", "core", "cardio"])
+    for (const difficulty of ["beginner", "intermediate", "advanced"])
+      for (const equipment of [["bodyweight"], ["dumbbells"], ["bands"]])
+        for (const group of ["chest", "back", "shoulders", "glutes", "calves", "core"]) {
+          const input = resolvedInput({ ...base, instructions: `Only ${group}`, focus, difficulty, equipment }, intent({ targetMode: "only", targetMuscles: [group] }));
+          const plan = validateModelResponse(slotSelection(input), input);
+          assert.ok(plan.exercises.every((item) => matchesMuscleGroup(item, group)));
+          assert.ok(getExerciseContext(input).eligible.every((item) => item.level <= ({beginner:1, intermediate:2, advanced:3})[difficulty]));
+        }
+});
+
+test("biceps-only allows curls and excludes rows that list biceps as a secondary muscle", () => {
+  const input = resolvedInput({ ...base, equipment: ["dumbbells"], instructions: "Only biceps" }, intent({ targetMode: "only", targetMuscles: ["biceps"] }));
+  assert.deepEqual(getExerciseContext(input).eligible.map((item) => item.id), ["db-curl"]);
+  assert.equal(validateModelResponse(slotSelection(input), input).exercises.length, 1);
+});
+
+test("emphasis retains broader coverage and named requests are pinned into allowed slots", () => {
+  const input = resolvedInput({ ...base, equipment: ["dumbbells"], instructions: "Full body with extra chest; include dumbbell curl" },
+    intent({ targetMode: "emphasize", targetMuscles: ["chest"], requiredExerciseIds: ["db-curl"] }));
+  const slots = buildSelectionSlots(input);
+  assert.ok(slots.some((slot) => slot.ids.length === 1 && slot.ids[0] === "db-curl"));
+  const plan = validateModelResponse(slotSelection(input), input);
+  assert.ok(plan.exercises.some((item) => item.id === "db-curl"));
+  assert.ok(plan.exercises.filter((item) => item.muscles[0] === "Chest").length >= 2);
+  assert.ok(plan.exercises.some((item) => item.pattern === "hip"));
+  assert.ok(plan.coverageNotes.some((note) => note.includes("Extra focus: chest")));
+});
+
+test("semantic exclusions and explicit muscle focus cannot expand equipment or ignore common restrictions", async () => {
+  const body = { ...base, instructions: "Chest only. No floor.", difficulty: "beginner" };
+  let calls = 0;
+  const response = await worker.fetch(request(body), environment(intent({ targetMode: "only", targetMuscles: ["chest"] }), () => { calls++; }));
+  assert.equal(response.status, 422);
+  assert.equal(calls, 1);
+  const named = { ...base, equipment: ["dumbbells"], instructions: "Include dumbbell curl" };
+  const input = resolvedInput(named, intent({ requiredExerciseIds: ["db-curl"] }));
+  assert.ok(validateModelResponse(slotSelection(input), input).exercises.some((item) => item.id === "db-curl"));
+  const excluded = getAvailableExercises(base).filter((item) => item.tags.includes("floor")).map((item) => item.id);
+  const standing = resolvedInput({ ...base, instructions: "I want to stay off the ground" }, intent({ excludedExerciseIds: excluded }));
+  assert.ok(validateModelResponse(slotSelection(standing), standing).exercises.every((item) => !EXERCISES.find((entry) => entry.id === item.id).tags.includes("floor")));
+});
+
+test("uninterpretable, contradictory and unavailable instructions fail without returning a preset workout", async () => {
+  const body = { ...base, instructions: "Custom workout please" };
+  for (const candidate of [null, {}, intent({ targetMode: "only", targetMuscles: ["unknown"] }), intent({ requiredExerciseIds: ["db-row"] })]) {
+    let calls = 0;
+    const response = await worker.fetch(request(body), environment(candidate, () => { calls++; }));
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).code, "AI_INVALID_INSTRUCTIONS");
+    assert.equal(calls, 1);
+  }
+  for (const candidate of [intent({ cannotComply: true }), intent({ requiredExerciseIds: ["bw-squat"], excludedExerciseIds: ["bw-squat"] }), intent({ targetMode: "only", targetMuscles: ["biceps"] })]) {
+    assert.equal((await worker.fetch(request(body), environment(candidate))).status, 422);
+  }
+  // A client cannot smuggle a trusted interpretation into the server.
+  const input = validateRequest({ ...base, instructionIntent: intent({ targetMode: "only", targetMuscles: ["chest"] }) });
+  assert.equal(input.instructionIntent, undefined);
+  assert.ok(getExerciseContext(input).eligible.some((item) => item.pattern === "hip"));
+});
+
+test("instruction interpretation shares the response deadline and cannot trigger an unbounded extra inference", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async () => {
+    calls++;
+    if (calls === 1) {
+      t.mock.timers.tick(49_000);
+      return { response: intent({ targetMode: "only", targetMuscles: ["chest"] }) };
+    }
+    return new Promise(() => {});
+  };
+  const pending = worker.fetch(request({ ...base, instructions: "Chest only" }), env);
+  await new Promise(setImmediate);
+  assert.equal(calls, 2);
+  t.mock.timers.tick(1_000);
+  const response = await pending;
+  assert.equal((await response.json()).code, "AI_TIMEOUT");
+  assert.equal(calls, 2);
+});
+
+test("free-text interpretation runs once even when exercise selection needs a corrective retry", async () => {
+  const body = { ...base, instructions: "Give me one that just focuses on chest" };
+  const interpreted = intent({ targetMode: "only", targetMuscles: ["chest"] });
+  const expected = resolvedInput(body, interpreted);
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async (_model, options) => {
+    calls++;
+    if (calls === 1) return { response: interpreted };
+    assert.ok(options.messages[1].content.includes(body.instructions));
+    return { response: calls === 2 ? { title: "Incomplete", choices: {} } : slotSelection(expected) };
+  };
+  const response = await worker.fetch(request(body), env);
+  assert.equal(response.status, 200);
+  assert.equal(calls, 3);
+  assert.ok((await response.json()).workout.exercises.every((item) => item.muscles[0] === "Chest"));
+});
+
 // Run actual frontend functions without needing a browser or duplicating their
 // logic. The cut points are declarations, not copied implementations.
 const appSource = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+
+test("the optional instructions textbox is sent verbatim apart from surrounding whitespace", () => {
+  const context = vm.createContext({
+    aiDuration: { value: "15" }, aiWorkSeconds: { value: "30" }, aiRestSeconds: { value: "15" },
+    aiDifficulty: { value: "intermediate" }, aiInstructions: { value: "  Give me one that just focuses on chest  " },
+    aiBuilderForm: { querySelector: () => ({ value: "full-body" }), querySelectorAll: () => [{ value: "bodyweight" }] },
+  });
+  vm.runInContext(appSource.slice(appSource.indexOf("function getSelectedFocus("), appSource.indexOf("function syncBuilderDurationOptions(")), context);
+  const body = context.getBuilderRequest();
+  assert.equal(body.instructions, "Give me one that just focuses on chest");
+  assert.equal(body.focus, "full-body");
+  assert.equal(body.planVersion, 2);
+  assert.deepEqual(Array.from(body.equipment), ["bodyweight"]);
+});
+
 const mediaContext = vm.createContext({ self: {} });
 vm.runInContext(readFileSync(new URL("../exercise-media.js", import.meta.url), "utf8"), mediaContext);
 const exerciseMedia = mediaContext.self.CIRCUIT_TIMER_MEDIA;
