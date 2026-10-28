@@ -1,4 +1,14 @@
-# Workout generation v64
+# Workout generation
+
+## Current runtime
+
+Standard builder selections use a complete catalog matching algorithm with no model dependency. Every plan is validated for selected equipment, experience, distinct IDs, movement coverage and timing. This includes upper-body/bodyweight at all experience levels. Shuffled candidates vary circuits; narrow slots are assigned first and the search backtracks rather than failing because of a random early choice.
+
+Optional text is interpreted into a constrained intent before catalog selection. AI handles the meaning of the text; code owns exercise eligibility and assembly. One malformed interpretation may be retried within a shared 50-second budget, for at most two model calls. Standard selections use none. Explicit inability to comply, provider errors and timeouts do not fall back to an unrelated preset. Successful responses identify the generation path and `generatorVersion: catalog-v1`; existing frontend responses, images and caches remain compatible.
+
+All 36 tests pass. They execute the actual Worker handler without an AI binding for all 105 equipment/focus/experience combinations and repeat the reported upper-body/bodyweight case at every level. Intent tests mock AI, so they do not establish live natural-language understanding. The exact previous production provider/validation exception was not observed. Deploy through the existing Git integration and verify production generation.
+
+The sections below record catalog rules and prior rollout details. Current generation uses the catalog directly, replacing the earlier model-selected exercise list.
 
 ## Where changes belong
 
@@ -7,7 +17,7 @@
 - `app.js`: request version, response validation, review display, and interval/exercise rotation. The form still uses the existing equipment, difficulty, focus, timing, and optional text inputs.
 - `index.html`, `styles.css`, and `service-worker.js`: review notes and the v64 asset/cache update. No accounts, profiles, or weekly schedule are introduced.
 
-The model stays `@cf/meta/llama-3.1-8b-instruct-fp8`. AI now chooses catalog IDs instead of inventing exercise names and instructions. The server owns the exercise cues. Unknown IDs, duplicates, unavailable equipment, overly advanced variations, missing required categories, and excessive repetition within one category are rejected. An invalid model response produces an error; it never falls back to an unchecked workout.
+The initial v64/v65 model was `@cf/meta/llama-3.1-8b-instruct-fp8`; the reliability repair below uses the documented JSON Mode model `@cf/meta/llama-3.1-8b-instruct`. AI now chooses catalog IDs instead of inventing exercise names and instructions. The server owns the exercise cues. Unknown IDs, duplicates, unavailable equipment, overly advanced variations, missing required categories, and excessive repetition within one category are rejected. An invalid model response produces an error; it never falls back to an unchecked workout.
 
 ## Selection rules
 
@@ -43,3 +53,21 @@ The existing controls now lead to picture-backed review cards and a timer image.
 `tools/generate-exercise-media.mjs` owns the editable diagrams and media map. `assets/exercises/README.md` documents their scope; `assets/exercises/preview.png` shows four actual assets. These are static schematics, not photographs or animations. No external image service, API key, or model change is needed. The v65 service worker precaches the map and all pictures, about 260 KB of SVG data, for offline use.
 
 The expanded 20-test suite checks every catalog/media match, local-only URLs, fallback behavior, image rotation, pause-on-inspection, and offline cache coverage. Existing workout generation, protections, and rollout compatibility tests remain in place. Local SVG contact sheets were visually inspected; browser UI/viewport verification still requires a permitted preview environment.
+
+
+## Generation reliability repair
+
+The v65 generic error conflated provider failures, invalid JSON and invalid exercise selection. Production logs were not available during diagnosis. The repair uses the documented JSON Mode model `@cf/meta/llama-3.1-8b-instruct` and a dynamic schema: code allocates feasible movement-category slots; The catalog matching algorithm picks eligible, distinct IDs for the slots. That removes counting and category allocation from the model's task while retaining its responsibility to respect the full free text. An instruction interpretation refusal is returned as 422.
+
+One invalid instruction interpretation gets one corrective attempt, followed by strict catalog selection and validation. There is no automatic unchecked workout. Service failures and timeouts return distinct diagnostic codes and correlation IDs without exposing provider details. All phases share a 50-second response budget. A request without text uses zero inference calls; custom instructions use one interpretation call normally, or two after a malformed interpretation. Existing origin/rate-limit protections, frontend response contract, picture IDs and cache version remain unchanged. The changes are Worker-only at runtime, so a frontend cache bump is unnecessary.
+
+Regression tests cover schema feasibility across equipment/focus/level and both plan versions, restricted choices, malformed JSON, duplicate IDs, missing categories, old-model response shape, successful retry, bounded attempts, refusal, upstream failure and picture-compatible IDs. These tests mock inference; a successful real-model preview request remains the release verification step.
+
+
+## Optional instructions and focus precedence
+
+The previous implementation correctly sent the optional text but built eligibility and movement quotas from the preset first. That meant a chest-only request could still be required to include legs, back and core. The Worker now interprets nonempty text before choosing category slots. Its validated schema has `targetMode` (`preset`, `only`, `emphasize`), known muscle groups, required catalog IDs and excluded catalog IDs. Only this server-generated interpretation is trusted; a client cannot supply its own.
+
+An explicit text focus takes precedence over the preset. Equipment, experience, common movement exclusions, catalog IDs and exact timing remain hard limits. Muscle-only eligibility uses the catalog's primary muscle (first muscle label) to avoid admitting exercises that mention the requested muscle only secondarily. Emphasis reserves up to two matching movements per group where available, and named requests receive pinned slots. Server validation checks every requested group and named exercise. Small pools repeat a shorter list; impossible combinations fail instead of silently broadening the workout. Existing preview notes show the interpreted focus and limited variety.
+
+Blank instructions skip interpretation. Nonempty text uses one compact interpretation call, with one possible corrective interpretation retry under the same 50-second budget. Catalog selection uses no inference. Thus the maximum is two model calls per admitted request with text. The model still interprets natural language; automated tests cannot establish perfect understanding of arbitrary requests. Regression tests include the user's exact chest-only wording, the actual frontend textbox-to-request function, all preset/level/equipment combinations for several targets, primary versus supporting muscles, named requests, emphasis, exclusions, contradictions and the shared deadline. Real-model behavior remains to be verified.

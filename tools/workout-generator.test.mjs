@@ -2,14 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import worker, { validateRequest, buildPrompt, validateModelResponse } from "../cloudflare-worker/src/index.js";
-import { EXERCISES, getExerciseContext, excludedTags } from "../cloudflare-worker/src/exercise-library.js";
+import worker, { validateRequest, validateModelResponse, buildSelectionSlots, selectCatalogWorkout, finalizeSelection } from "../cloudflare-worker/src/index.js";
+import { EXERCISES, getExerciseContext, excludedTags, getAvailableExercises, matchesMuscleGroup } from "../cloudflare-worker/src/exercise-library.js";
 
 const base = { planVersion: 2, durationMinutes: 17, workSeconds: 30, restSeconds: 30,
   difficulty: "intermediate", focus: "full-body", equipment: ["bodyweight"], instructions: "" };
 
-// A predictable stand-in for AI, so contract and timer tests do not consume
-// metered inference. Live-model behavior must be checked on the preview Worker.
+// Contract fixtures and AI-intent doubles. Standard-generation tests exercise
+// the real Worker/catalog selector without an AI binding or model inference.
 function selection(input) {
   const { eligible, requiredPatterns, maxPatternRepeat } = getExerciseContext(input);
   const selected = requiredPatterns.map((pattern) => eligible.find((item) => item.pattern === pattern));
@@ -128,18 +128,20 @@ test("uses trusted catalog instructions instead of model-authored movement subst
   assert.ok(plan.coverageNotes.some((note) => note.includes("loaded row")));
 });
 
-test("Worker success keeps the API contract, restrictions, CORS and configured model", async () => {
-  const input = validateRequest(base);
-  let captured;
-  const response = await worker.fetch(request(), environment(selection(input), (model, options) => { captured = { model, options }; }));
+test("standard Worker generation does not depend on AI availability and preserves the API", async () => {
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async () => { calls++; throw new Error("Upstream unavailable"); };
+  const response = await worker.fetch(request(), env);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Access-Control-Allow-Origin"), "https://kpmike87.github.io");
   const body = await response.json();
   assert.equal(body.workout.exercises.length, 8);
   assert.equal(body.workout.extraExercises, 1);
-  assert.equal(captured.model, "@cf/meta/llama-3.1-8b-instruct-fp8");
-  assert.ok(captured.options.messages[1].content.includes("bw-push-up"));
-  assert.ok(buildPrompt({ ...input, instructions: "Avoid jumping and keep it quiet" }).includes("Avoid jumping and keep it quiet"));
+  assert.equal(body.model, null);
+  assert.equal(body.generationSource, "catalog");
+  assert.equal(body.generatorVersion, "catalog-v1");
+  assert.equal(calls, 0);
 });
 
 test("Worker preserves forbidden-origin, invalid-input and rate-limit behavior before inference", async () => {
@@ -154,15 +156,295 @@ test("Worker preserves forbidden-origin, invalid-input and rate-limit behavior b
   assert.equal(calls, 0);
 });
 
-test("unfulfillable instructions and invalid AI selections fail without returning an unchecked fallback", async () => {
-  assert.equal((await worker.fetch(request(), environment({ cannotComply: true }))).status, 422);
-  assert.equal((await worker.fetch(request(), environment({ title: "Bad", exerciseIds: ["invented"] }))).status, 502);
-  assert.throws(() => validateRequest({ ...base, focus: "upper-body", instructions: "No floor. No overhead." , equipment: [] }));
+test("custom instructions fail clearly rather than falling back to a preset", async () => {
+  const body = { ...base, instructions: "Custom instructions" };
+  assert.equal((await worker.fetch(request(body), environment({ cannotComply: true }))).status, 422);
+  assert.equal((await worker.fetch(request(body), environment({ title: "Wrong schema" }))).status, 502);
+  assert.throws(() => validateRequest({ ...base, equipment: [] }));
+});
+
+// Production now asks for category-constrained slots, rather than relying on AI
+// to count and distribute movement patterns correctly in a free-form ID list.
+function slotSelection(input) {
+  const used = new Set();
+  const choices = Object.fromEntries(buildSelectionSlots(input).map((slot) => {
+    const id = slot.ids.find((item) => !used.has(item));
+    assert.ok(id, `No distinct choice for ${slot.key}`);
+    used.add(id);
+    return [slot.key, id];
+  }));
+  return { title: "Complete circuit", cannotComply: false, choices };
+}
+
+test("all equipment, focus and level combinations have feasible catalog slots", () => {
+  const combinations = [["bodyweight"], ["dumbbells"], ["bands"], ["bodyweight", "dumbbells"],
+    ["bodyweight", "bands"], ["dumbbells", "bands"], ["bodyweight", "dumbbells", "bands"]];
+  for (const equipment of combinations) for (const difficulty of ["beginner", "intermediate", "advanced"])
+    for (const focus of ["full-body", "upper-body", "lower-body", "core", "cardio"])
+      for (const planVersion of [undefined, 2]) {
+        const input = validateRequest({ ...base, equipment, difficulty, focus, planVersion });
+        const slots = buildSelectionSlots(input);
+        assert.equal(slots.length, input.exerciseCount);
+        assert.equal(selectCatalogWorkout(input).exercises.length, input.exerciseCount);
+        assert.equal(validateModelResponse(slotSelection(input), input).exercises.length, input.exerciseCount);
+      }
+});
+
+test("restricted slots cannot reintroduce excluded movements or unselected equipment", () => {
+  for (const instructions of ["Standing only. No jumping. No squats.", "No floor. No overhead.", "No kneeling. No push-ups."]) {
+    const input = validateRequest({ ...base, equipment: ["bands"], instructions });
+    const candidate = slotSelection(input);
+    assert.ok(validateModelResponse(candidate, input).exercises.length > 0);
+    candidate.choices.slot1 = "db-row";
+    assert.throws(() => validateModelResponse(candidate, input), /ineligible/);
+  }
+});
+
+test("standard circuits succeed without an AI binding across all 105 equipment/focus/experience choices", async () => {
+  const combinations = [["bodyweight"], ["dumbbells"], ["bands"], ["bodyweight", "dumbbells"],
+    ["bodyweight", "bands"], ["dumbbells", "bands"], ["bodyweight", "dumbbells", "bands"]];
+  const env = { CLIENT_RATE_LIMIT: { limit: async () => ({ success: true }) }, GLOBAL_RATE_LIMIT: { limit: async () => ({ success: true }) } };
+  for (const equipment of combinations) for (const difficulty of ["beginner", "intermediate", "advanced"])
+    for (const focus of ["full-body", "upper-body", "lower-body", "core", "cardio"]) {
+      const response = await worker.fetch(request({ ...base, equipment, difficulty, focus }), env);
+      assert.equal(response.status, 200, `${equipment}/${difficulty}/${focus}`);
+      const body = await response.json();
+      const input = validateRequest({ ...base, equipment, difficulty, focus });
+      const { eligible, requiredPatterns } = getExerciseContext(input);
+      assert.equal(body.workout.exercises.length, input.exerciseCount);
+      assert.equal(new Set(body.workout.exercises.map((item) => item.id)).size, input.exerciseCount);
+      assert.ok(body.workout.exercises.every((item) => eligible.some((entry) => entry.id === item.id)));
+      for (const pattern of requiredPatterns) assert.ok(body.workout.exercises.some((item) => item.pattern === pattern));
+    }
+});
+
+test("reported upper-body/bodyweight case succeeds repeatedly at every experience level without inference", async () => {
+  let calls = 0;
+  const env = environment(null, () => { calls++; });
+  for (const difficulty of ["beginner", "intermediate", "advanced"]) for (let repeat = 0; repeat < 20; repeat++) {
+    const body = { ...base, durationMinutes: 15, workSeconds: 30, restSeconds: 15, focus: "upper-body", equipment: ["bodyweight"], difficulty };
+    const response = await worker.fetch(request(body), env);
+    assert.equal(response.status, 200);
+    const plan = (await response.json()).workout;
+    assert.ok(plan.exercises.every((item) => ["push", "pull", "shoulder", "arms"].includes(item.pattern)));
+    assert.ok(plan.exercises.every((item) => item.equipment.length === 0));
+    assert.equal(plan.rounds * plan.exercises.length + plan.extraExercises, 20);
+  }
+  assert.equal(calls, 0);
+});
+
+test("invalid instruction interpretation retries once; provider failures and refusals do not retry", async () => {
+  const body = { ...base, instructions: "Custom workout please" };
+  let calls = 0;
+  let response = await worker.fetch(request(body), environment({}, () => { calls++; }));
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).code, "AI_INVALID_INSTRUCTIONS");
+  assert.equal(calls, 2);
+  calls = 0;
+  response = await worker.fetch(request(body), environment({ cannotComply: true }, () => { calls++; }));
+  assert.equal(response.status, 422);
+  assert.equal(calls, 1);
+  calls = 0;
+  const env = environment(null);
+  env.AI.run = async () => { calls++; throw new Error("private provider details"); };
+  response = await worker.fetch(request(body), env);
+  const failed = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(failed.code, "AI_SERVICE_UNAVAILABLE");
+  assert.equal(calls, 1);
+  assert.ok(!JSON.stringify(failed).includes("private provider details"));
+  const noAi = await worker.fetch(request(body), {});
+  assert.equal(noAi.status, 503);
+  assert.ok((await noAi.json()).error.includes("Clear the optional instructions"));
+});
+
+test("instruction retry attempts share one deadline inside the browser request timeout", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async () => {
+    calls++;
+    if (calls === 1) {
+      t.mock.timers.tick(49_000);
+      return { response: "not JSON" };
+    }
+    return new Promise(() => {});
+  };
+  const pending = worker.fetch(request({ ...base, instructions: "Custom workout" }), env);
+  await new Promise(setImmediate);
+  assert.equal(calls, 2);
+  t.mock.timers.tick(1_000);
+  const response = await pending;
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).code, "AI_TIMEOUT");
+  assert.equal(calls, 2);
+});
+
+function intent(overrides = {}) {
+  return { targetMode: "preset", targetMuscles: [], requiredExerciseIds: [], excludedExerciseIds: [], cannotComply: false, ...overrides };
+}
+
+function resolvedInput(body, interpreted) {
+  const input = validateRequest(body, true);
+  input.instructionIntent = interpreted;
+  return finalizeSelection(input);
+}
+
+test("exact chest-only example uses one interpretation and overrides a conflicting preset", async () => {
+  const body = { ...base, instructions: "Give me one that just focuses on chest" };
+  const interpreted = intent({ targetMode: "only", targetMuscles: ["chest"] });
+  let calls = 0;
+  const env = environment(interpreted, (model, options) => {
+    calls++;
+    assert.equal(model, "@cf/meta/llama-3.1-8b-instruct");
+    assert.equal(options.response_format.type, "json_schema");
+    assert.equal(JSON.parse(options.messages[1].content).instructions, body.instructions);
+  });
+  const response = await worker.fetch(request(body), env);
+  assert.equal(response.status, 200);
+  assert.equal(calls, 1);
+  const result = await response.json();
+  assert.equal(result.generationSource, "ai-preferences/catalog-selection");
+  const plan = result.workout;
+  assert.equal(plan.exercises.length, 2);
+  assert.ok(plan.exercises.every((item) => item.muscles[0] === "Chest"));
+  assert.ok(plan.coverageNotes.some((note) => note.includes("Requested focus: chest")));
+  assert.ok(!plan.coverageNotes.some((note) => note.includes("full-body coverage") || note.includes("loaded row")));
+  assert.equal(plan.totalIntervals, 17);
+});
+
+test("muscle-only requests stay targeted across every preset, level and selected equipment", () => {
+  for (const focus of ["full-body", "upper-body", "lower-body", "core", "cardio"])
+    for (const difficulty of ["beginner", "intermediate", "advanced"])
+      for (const equipment of [["bodyweight"], ["dumbbells"], ["bands"]])
+        for (const group of ["chest", "back", "shoulders", "glutes", "calves", "core"]) {
+          const input = resolvedInput({ ...base, instructions: `Only ${group}`, focus, difficulty, equipment }, intent({ targetMode: "only", targetMuscles: [group] }));
+          const plan = validateModelResponse(slotSelection(input), input);
+          assert.ok(plan.exercises.every((item) => matchesMuscleGroup(item, group)));
+          assert.ok(getExerciseContext(input).eligible.every((item) => item.level <= ({beginner:1, intermediate:2, advanced:3})[difficulty]));
+        }
+});
+
+test("biceps-only allows curls and excludes rows that list biceps as a secondary muscle", () => {
+  const input = resolvedInput({ ...base, equipment: ["dumbbells"], instructions: "Only biceps" }, intent({ targetMode: "only", targetMuscles: ["biceps"] }));
+  assert.deepEqual(getExerciseContext(input).eligible.map((item) => item.id), ["db-curl"]);
+  assert.equal(validateModelResponse(slotSelection(input), input).exercises.length, 1);
+});
+
+test("emphasis retains broader coverage and named requests are pinned into allowed slots", () => {
+  const input = resolvedInput({ ...base, equipment: ["dumbbells"], instructions: "Full body with extra chest; include dumbbell curl" },
+    intent({ targetMode: "emphasize", targetMuscles: ["chest"], requiredExerciseIds: ["db-curl"] }));
+  const slots = buildSelectionSlots(input);
+  assert.ok(slots.some((slot) => slot.ids.length === 1 && slot.ids[0] === "db-curl"));
+  const plan = validateModelResponse(slotSelection(input), input);
+  assert.ok(plan.exercises.some((item) => item.id === "db-curl"));
+  assert.ok(plan.exercises.filter((item) => item.muscles[0] === "Chest").length >= 2);
+  assert.ok(plan.exercises.some((item) => item.pattern === "hip"));
+  assert.ok(plan.coverageNotes.some((note) => note.includes("Extra focus: chest")));
+});
+
+test("semantic exclusions and explicit muscle focus cannot expand equipment or ignore common restrictions", async () => {
+  const body = { ...base, instructions: "Chest only. No floor.", difficulty: "beginner" };
+  let calls = 0;
+  const response = await worker.fetch(request(body), environment(intent({ targetMode: "only", targetMuscles: ["chest"] }), () => { calls++; }));
+  assert.equal(response.status, 422);
+  assert.equal(calls, 1);
+  const named = { ...base, equipment: ["dumbbells"], instructions: "Include dumbbell curl" };
+  const input = resolvedInput(named, intent({ requiredExerciseIds: ["db-curl"] }));
+  assert.ok(validateModelResponse(slotSelection(input), input).exercises.some((item) => item.id === "db-curl"));
+  const excluded = getAvailableExercises(base).filter((item) => item.tags.includes("floor")).map((item) => item.id);
+  const standing = resolvedInput({ ...base, instructions: "I want to stay off the ground" }, intent({ excludedExerciseIds: excluded }));
+  assert.ok(validateModelResponse(slotSelection(standing), standing).exercises.every((item) => !EXERCISES.find((entry) => entry.id === item.id).tags.includes("floor")));
+});
+
+test("uninterpretable, contradictory and unavailable instructions fail without returning a preset workout", async () => {
+  const body = { ...base, instructions: "Custom workout please" };
+  for (const candidate of [null, {}, intent({ targetMode: "only", targetMuscles: ["unknown"] }), intent({ requiredExerciseIds: ["db-row"] })]) {
+    let calls = 0;
+    const response = await worker.fetch(request(body), environment(candidate, () => { calls++; }));
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).code, "AI_INVALID_INSTRUCTIONS");
+    assert.equal(calls, 2);
+  }
+  for (const candidate of [intent({ cannotComply: true }), intent({ requiredExerciseIds: ["bw-squat"], excludedExerciseIds: ["bw-squat"] }), intent({ targetMode: "only", targetMuscles: ["biceps"] })]) {
+    assert.equal((await worker.fetch(request(body), environment(candidate))).status, 422);
+  }
+  // A client cannot smuggle a trusted interpretation into the server.
+  const input = validateRequest({ ...base, instructionIntent: intent({ targetMode: "only", targetMuscles: ["chest"] }) });
+  assert.equal(input.instructionIntent, undefined);
+  assert.ok(getExerciseContext(input).eligible.some((item) => item.pattern === "hip"));
+});
+
+test("slow custom interpretation times out once and never substitutes an unrelated standard circuit", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async () => { calls++; return new Promise(() => {}); };
+  const pending = worker.fetch(request({ ...base, instructions: "Chest only" }), env);
+  await new Promise(setImmediate);
+  t.mock.timers.tick(50_000);
+  const response = await pending;
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(body.code, "AI_TIMEOUT");
+  assert.equal(body.workout, undefined);
+  assert.equal(calls, 1);
+});
+
+test("a malformed custom interpretation is corrected once before catalog selection", async () => {
+  const body = { ...base, instructions: "Give me one that just focuses on chest" };
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async (_model, options) => {
+    calls++;
+    if (calls === 1) return { response: "not JSON" };
+    assert.ok(JSON.parse(options.messages[1].content).correction.includes("previous interpretation"));
+    return { response: intent({ targetMode: "only", targetMuscles: ["chest"] }) };
+  };
+  const response = await worker.fetch(request(body), env);
+  assert.equal(response.status, 200);
+  assert.equal(calls, 2);
+  assert.ok((await response.json()).workout.exercises.every((item) => item.muscles[0] === "Chest"));
+});
+
+test("multiple requested targets and named exercises remain required by runtime validation", () => {
+  for (const targetMuscles of [["chest", "back"], ["biceps", "triceps"], ["quads", "glutes"], ["core", "back"]]) {
+    const input = resolvedInput({ ...base, difficulty: "advanced", equipment: ["dumbbells"], instructions: "Target these muscle groups" }, intent({ targetMode: "only", targetMuscles }));
+    const plan = validateModelResponse(slotSelection(input), input);
+    for (const group of targetMuscles) assert.ok(plan.exercises.some((item) => matchesMuscleGroup(item, group)));
+    assert.ok(plan.exercises.every((item) => targetMuscles.some((group) => matchesMuscleGroup(item, group))));
+  }
+  const requiredExerciseIds = ["bw-knee-push-up", "bw-push-up", "bw-close-push-up"];
+  const named = resolvedInput({ ...base, difficulty: "advanced", instructions: "Include these three push-ups" }, intent({ requiredExerciseIds }));
+  const plan = validateModelResponse(slotSelection(named), named);
+  assert.ok(requiredExerciseIds.every((id) => plan.exercises.some((item) => item.id === id)));
+  const emphasized = resolvedInput({ ...base, equipment: ["dumbbells"], instructions: "Extra chest" }, intent({ targetMode: "emphasize", targetMuscles: ["chest"] }));
+  const invalid = slotSelection(emphasized);
+  const matchingKeys = Object.keys(invalid.choices).filter((key) => matchesMuscleGroup(EXERCISES.find((item) => item.id === invalid.choices[key]), "chest"));
+  const ids = Object.values(invalid.choices);
+  const other = getExerciseContext(emphasized).eligible.find((item) => !matchesMuscleGroup(item, "chest") && !ids.includes(item.id));
+  ids[Object.keys(invalid.choices).indexOf(matchingKeys[0])] = other.id;
+  assert.throws(() => validateModelResponse({ title: "Ignored extra focus", exerciseIds: ids }, emphasized));
 });
 
 // Run actual frontend functions without needing a browser or duplicating their
 // logic. The cut points are declarations, not copied implementations.
 const appSource = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+
+test("the optional instructions textbox is sent verbatim apart from surrounding whitespace", () => {
+  const context = vm.createContext({
+    aiDuration: { value: "15" }, aiWorkSeconds: { value: "30" }, aiRestSeconds: { value: "15" },
+    aiDifficulty: { value: "intermediate" }, aiInstructions: { value: "  Give me one that just focuses on chest  " },
+    aiBuilderForm: { querySelector: () => ({ value: "full-body" }), querySelectorAll: () => [{ value: "bodyweight" }] },
+  });
+  vm.runInContext(appSource.slice(appSource.indexOf("function getSelectedFocus("), appSource.indexOf("function syncBuilderDurationOptions(")), context);
+  const body = context.getBuilderRequest();
+  assert.equal(body.instructions, "Give me one that just focuses on chest");
+  assert.equal(body.focus, "full-body");
+  assert.equal(body.planVersion, 2);
+  assert.deepEqual(Array.from(body.equipment), ["bodyweight"]);
+});
+
 const mediaContext = vm.createContext({ self: {} });
 vm.runInContext(readFileSync(new URL("../exercise-media.js", import.meta.url), "utf8"), mediaContext);
 const exerciseMedia = mediaContext.self.CIRCUIT_TIMER_MEDIA;
