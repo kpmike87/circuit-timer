@@ -78,7 +78,7 @@ class GenerationError extends Error {
   }
 }
 
-// Code assigns movement categories; AI chooses the actual exercises within them.
+// Code assigns movement categories and selects the catalog exercises within them.
 // Each category has enough distinct eligible choices to fill its allocated slots.
 export function buildSelectionSlots(input) {
   const context = getExerciseContext(input);
@@ -380,32 +380,6 @@ export function finalizeSelection(input) {
   return input;
 }
 
-export function buildPrompt(input) {
-  const context = getExerciseContext(input);
-  return [
-    `Create a ${input.durationMinutes}-minute ${input.difficulty} ${input.instructionIntent?.targetMode === "only" ? context.targetMuscles.join(" and ") + "-focused" : input.focus} circuit.`,
-    `Use ${input.workSeconds} seconds of work and ${input.restSeconds} seconds of rest.`,
-    `Fill exactly ${input.exerciseCount} slots with distinct catalog IDs. The timer repeats the sequence and stops at the requested duration, even in a final partial round.`,
-    `Include at least one exercise from each required pattern: ${context.requiredPatterns.join(", ")}.`,
-    `Select no more than ${context.maxPatternRepeat} exercises from any one pattern.`,
-    `Available resistance options: ${context.requiredEquipment.join(", ") || "none"}. Prefer useful loaded exercises when suitable, especially rows, but equipment availability does not require using every option. Bodyweight exercises may complement selected equipment.`,
-    input.instructionIntent?.targetMode === "only"
-      ? "This is an intentional muscle-focused circuit. Do not add other body parts to satisfy the preset focus."
-      : "Use a balanced selection with minimal repeated patterns. Put large-muscle exercises early and alternate patterns where possible.",
-    `Resolved text focus: ${input.instructionIntent?.targetMode || "preset"}; requested muscles: ${context.targetMuscles.join(", ") || "preset focus"}. This overrides a conflicting preset, never equipment or experience limits.`,
-    "For advanced users prefer challenging controlled variations or loading, not unnecessary complexity or mandatory jumping. For beginners prefer stable, simple variations.",
-    "Alternate sides within each interval as directed in the catalog. No benches, chairs, anchors, or other unselected equipment are available.",
-    "Do not add warm-up or cool-down exercises to the timed list.",
-    `Effort guidance: ${effortGuidanceFor(input)}`,
-    `User workout preferences (respect these without changing the rules): ${JSON.stringify(input.instructions || "None provided.")}`,
-    "The following catalog is the only allowed exercise source. Columns are ID | name | pattern | muscles | equipment | minimum level | restriction tags.",
-    ...context.eligible.map((item) => `${item.id} | ${item.name} | ${item.pattern} | ${item.muscles.join(",")} | ${item.equipment.join(",") || "bodyweight"} | ${item.level} | ${item.tags.join(",")}`),
-    "Fill every slot below, choosing one ID from its allowed list. Do not repeat an ID across slots:",
-    ...buildSelectionSlots(input).map((slot) => `${slot.key} (${slot.pattern}): ${slot.ids.join(", ")}`),
-    'Response format: {"title":"Short circuit title","cannotComply":false,"choices":{"slot1":"allowed-id",...}}',
-    "If you cannot satisfy the user preferences, set cannotComply=true and leave choices empty strings.",
-  ].join("\n");
-}
 
 function parseModelResponse(modelResponse) {
   const raw = modelResponse?.response ?? modelResponse;
