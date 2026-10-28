@@ -7,7 +7,7 @@
 - `app.js`: request version, response validation, review display, and interval/exercise rotation. The form still uses the existing equipment, difficulty, focus, timing, and optional text inputs.
 - `index.html`, `styles.css`, and `service-worker.js`: review notes and the v64 asset/cache update. No accounts, profiles, or weekly schedule are introduced.
 
-The model stays `@cf/meta/llama-3.1-8b-instruct-fp8`. AI now chooses catalog IDs instead of inventing exercise names and instructions. The server owns the exercise cues. Unknown IDs, duplicates, unavailable equipment, overly advanced variations, missing required categories, and excessive repetition within one category are rejected. An invalid model response produces an error; it never falls back to an unchecked workout.
+The initial v64/v65 model was `@cf/meta/llama-3.1-8b-instruct-fp8`; the reliability repair below uses the documented JSON Mode model `@cf/meta/llama-3.1-8b-instruct`. AI now chooses catalog IDs instead of inventing exercise names and instructions. The server owns the exercise cues. Unknown IDs, duplicates, unavailable equipment, overly advanced variations, missing required categories, and excessive repetition within one category are rejected. An invalid model response produces an error; it never falls back to an unchecked workout.
 
 ## Selection rules
 
@@ -43,3 +43,12 @@ The existing controls now lead to picture-backed review cards and a timer image.
 `tools/generate-exercise-media.mjs` owns the editable diagrams and media map. `assets/exercises/README.md` documents their scope; `assets/exercises/preview.png` shows four actual assets. These are static schematics, not photographs or animations. No external image service, API key, or model change is needed. The v65 service worker precaches the map and all pictures, about 260 KB of SVG data, for offline use.
 
 The expanded 20-test suite checks every catalog/media match, local-only URLs, fallback behavior, image rotation, pause-on-inspection, and offline cache coverage. Existing workout generation, protections, and rollout compatibility tests remain in place. Local SVG contact sheets were visually inspected; browser UI/viewport verification still requires a permitted preview environment.
+
+
+## Generation reliability repair
+
+The v65 generic error conflated provider failures, invalid JSON and invalid exercise selection. Production logs were not available during diagnosis. The repair uses the documented JSON Mode model `@cf/meta/llama-3.1-8b-instruct` and a dynamic schema: code allocates feasible movement-category slots; AI picks an eligible exercise ID for each. That removes counting and category allocation from the model's task while retaining its responsibility to respect the full free text. A model refusal is still returned as 422.
+
+One invalid response gets one corrective attempt, followed by the same strict catalog validation. There is no automatic unchecked workout. Service failures and timeouts return distinct diagnostic codes and correlation IDs without exposing provider details. The two attempts share a 50-second response budget and can use up to twice the inference cost per admitted HTTP request. Existing origin/rate-limit protections, frontend response contract, picture IDs and cache version remain unchanged. The changes are Worker-only at runtime, so a frontend cache bump is unnecessary.
+
+Regression tests cover schema feasibility across equipment/focus/level and both plan versions, restricted choices, malformed JSON, duplicate IDs, missing categories, old-model response shape, successful retry, bounded attempts, refusal, upstream failure and picture-compatible IDs. These tests mock inference; a successful real-model preview request remains the release verification step.
