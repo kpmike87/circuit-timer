@@ -38,8 +38,16 @@ For Cloudflare Workers Builds, use this directory as the root directory and `npx
 
 The model is explicitly listed as supporting [Workers AI JSON Mode](https://developers.cloudflare.com/workers-ai/features/json-mode/). The Worker assigns movement-category slots and supplies a JSON schema with only eligible IDs for each slot. AI still chooses the exercises and receives all free-text preferences. Runtime validation enforces distinct IDs, coverage, eligibility and repetition limits. One invalid response gets one corrective inference attempt; explicit inability to comply (422) and provider failures (503) are not retried. No unchecked or generic fallback plan is returned.
 
-Both attempts share a 50-second response budget, within the frontend's existing 60-second timeout. Timing out the response does not cancel an already submitted provider inference. Inference cost can be up to two calls per admitted request; existing HTTP rate limits are unchanged.
+Interpretation and selection attempts share a 50-second response budget, within the frontend's existing 60-second timeout. Timing out the response does not cancel an already submitted provider inference. Requests without free text use at most two inference calls; nonempty free text adds one interpretation call within the same deadline (at most three total calls per admitted request); existing HTTP rate limits are unchanged.
 
 Error JSON includes a code and requestId. `AI_INVALID_SELECTION` (502) means both selections failed validation; `AI_SERVICE_UNAVAILABLE` (503) means inference threw; `AI_TIMEOUT` (503) means the response budget expired. Logs contain diagnostic codes and correlation IDs, not raw prompts, model responses, user instructions, or provider exception text. Check Workers logs and Workers AI usage for account-level failures.
 
 The reported v65 error could originate from inference, parsing, or selection validation because all three previously shared one message. The specific production exception has not been observed; this repair targets the source-level reliability gaps rather than claiming a confirmed live root cause.
+
+## Optional instructions take effect before exercise selection
+
+Nonempty text is interpreted once with a constrained schema before the catalog slots are built. It can specify a muscle-only focus, additional emphasis, named required exercises, and excluded exercises. An explicit muscle-only request overrides the preset focus; it cannot expand selected equipment, experience, or common movement restrictions. Blank text skips this inference. Both phases and any selection retry share the existing 50-second budget.
+
+For example, `Give me one that just focuses on chest` with Full body selected resolves to chest-only choices. Primary muscle metadata determines eligibility, so biceps-only selects curls rather than back rows that involve biceps secondarily. Supporting muscles still participate in compound movements. Broader workouts with extra emphasis reserve two matching exercises where the catalog permits. The preview displays the resolved muscle focus using its existing notes area.
+
+A small eligible pool produces a shorter repeated sequence, never unrelated exercises to fill eight slots. Unsupported or conflicting instructions return an explanation; malformed interpretation returns `AI_INVALID_INSTRUCTIONS` (502), with no preset fallback. Interpretation is still model-dependent: tests mock it, and review remains necessary. Named exercises are limited to the existing catalog.
