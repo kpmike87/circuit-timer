@@ -163,6 +163,9 @@ test("unfulfillable instructions and invalid AI selections fail without returnin
 // Run actual frontend functions without needing a browser or duplicating their
 // logic. The cut points are declarations, not copied implementations.
 const appSource = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const mediaContext = vm.createContext({ self: {} });
+vm.runInContext(readFileSync(new URL("../exercise-media.js", import.meta.url), "utf8"), mediaContext);
+const exerciseMedia = mediaContext.self.CIRCUIT_TIMER_MEDIA;
 const contractSource = appSource.slice(appSource.indexOf("function validateAIPlan("), appSource.indexOf("function renderAIPlan("));
 const frontend = vm.createContext({});
 vm.runInContext(contractSource, frontend);
@@ -191,11 +194,14 @@ test("review renders muscle and effort notes, then clears optional content for a
       get textContent() { return this.text; },
       append(...children) { this.children.push(...children); },
       appendChild(child) { this.children.push(child); },
+      setAttribute(name, value) { this[name] = value; },
+      addEventListener() {},
     };
   }
   const names = ["aiPreviewTitle", "aiPreviewMeta", "aiExerciseList", "aiEffortGuidance", "aiCoverageNotes", "aiSafetyNote", "aiPreview"];
   const context = vm.createContext({
     ...Object.fromEntries(names.map((name) => [name, element()])),
+    EXERCISE_MEDIA: exerciseMedia,
     document: { createElement: element },
     AI_DIFFICULTY_LABELS: { intermediate: "Intermediate" }, AI_FOCUS_LABELS: { "full-body": "Full body" },
   });
@@ -206,7 +212,8 @@ test("review renders muscle and effort notes, then clears optional content for a
   context.renderAIPlan(plan);
   assert.ok(context.aiPreviewMeta.textContent.includes("2 full rounds + 1 exercise"));
   assert.equal(context.aiExerciseList.children.length, 8);
-  assert.ok(context.aiExerciseList.children.every((item) => item.children[2].textContent.startsWith("Works: ")));
+  assert.ok(context.aiExerciseList.children.every((item) => item.children[1].children[2].textContent.startsWith("Works: ")));
+  assert.ok(context.aiExerciseList.children.every((item) => item.children[0].children[0].src.startsWith("./assets/exercises/")));
   assert.equal(context.aiEffortGuidance.hidden, false);
   assert.equal(context.aiCoverageNotes.hidden, false);
   context.renderAIPlan({ ...plan, effortGuidance: "", coverageNotes: [], exercises: [{ name: "Old exercise", instructions: "Use control." }] });
@@ -214,6 +221,97 @@ test("review renders muscle and effort notes, then clears optional content for a
   assert.equal(context.aiCoverageNotes.hidden, true);
   assert.equal(context.aiCoverageNotes.children.length, 0);
   assert.equal(context.aiExerciseList.children.length, 1);
+  assert.equal(context.aiExerciseList.children[0].children.length, 1);
+});
+
+test("every catalog ID has one local, accessible SVG with the correct exercise name", () => {
+  assert.deepEqual(Object.keys(exerciseMedia).sort(), EXERCISES.map((exercise) => exercise.id).sort());
+  for (const exercise of EXERCISES) {
+    const media = exerciseMedia[exercise.id];
+    assert.equal(media.name, exercise.name);
+    assert.ok(media.alt.startsWith(`${exercise.name}:`));
+    assert.match(media.src, /^\.\/assets\/exercises\/[a-z0-9-]+\.svg\?v=65$/);
+    const svg = readFileSync(new URL(`../${media.src.split("?")[0]}`, import.meta.url), "utf8");
+    assert.ok(svg.includes('<title id="title">') && svg.includes('<desc id="desc">'));
+    assert.ok(svg.includes(exercise.name));
+    assert.ok(!/<script|<foreignObject|\son\w+=|(?:href|src)=/i.test(svg), exercise.id);
+  }
+});
+
+test("unknown and legacy exercise IDs never receive a guessed or model-supplied picture", () => {
+  const context = vm.createContext({ EXERCISE_MEDIA: exerciseMedia });
+  vm.runInContext(contractSource, context);
+  for (const id of [undefined, "missing", "__proto__", "constructor", "../../picture"]) {
+    assert.equal(context.getExerciseMedia({ id, imageUrl: "https://other.example/picture.jpg" }), null);
+  }
+  assert.equal(context.getExerciseMedia({ id: "bw-squat" }).name, "Bodyweight squat");
+});
+
+test("active timer picture follows the current exercise and clears for manual or legacy plans", () => {
+  const attributes = {};
+  const picture = { alt: "", getAttribute: (name) => attributes[name], removeAttribute: (name) => { delete attributes[name]; }, set src(value) { attributes.src = value; } };
+  const context = vm.createContext({ EXERCISE_MEDIA: exerciseMedia,
+    state: { currentExerciseIndex: 0, plan: { exercises: [{ id: "bw-squat", name: "Bodyweight squat", instructions: "Use control." }, { id: "bw-push-up", name: "Push-up", instructions: "Keep a straight line." }] } },
+    exerciseLabel: {}, exerciseInstructions: {}, exerciseImageButton: { setAttribute() {} }, exerciseImage: picture, app: { dataset: {} },
+  });
+  const source = appSource.slice(appSource.indexOf("function syncExerciseDisplay("), appSource.indexOf("function getSelectedFocus("));
+  vm.runInContext(contractSource + source, context);
+  context.syncExerciseDisplay();
+  assert.ok(attributes.src.includes("bw-squat.svg"));
+  assert.equal(context.exerciseImageButton.hidden, false);
+  context.state.currentExerciseIndex = 1;
+  context.syncExerciseDisplay();
+  assert.ok(attributes.src.includes("bw-push-up.svg"));
+  context.state.plan = { exercises: [{ name: "Legacy exercise", instructions: "No known ID." }] };
+  context.state.currentExerciseIndex = 0;
+  context.syncExerciseDisplay();
+  assert.equal(context.exerciseImageButton.hidden, true);
+  assert.equal(attributes.src, undefined);
+  context.state.plan = null;
+  context.syncExerciseDisplay();
+  assert.equal(context.app.dataset.hasExerciseMedia, "false");
+  assert.equal(picture.alt, "");
+});
+
+test("opening a larger picture pauses a running workout and uses trusted local media", () => {
+  let pauses = 0;
+  const context = vm.createContext({ EXERCISE_MEDIA: exerciseMedia,
+    state: { running: true, paused: false },
+    exerciseImageDialog: { open: false, showModal() { this.open = true; } },
+    exerciseImageDialogTitle: {}, exerciseImageDialogImage: {}, exerciseImageDialogInstructions: {}, exerciseImageDialogStatus: {},
+  });
+  context.pauseOrResume = () => { pauses++; context.state.running = false; context.state.paused = true; };
+  vm.runInContext(contractSource, context);
+  context.openExerciseIllustration({ id: "bw-squat", name: "Bodyweight squat", instructions: "Use control." });
+  assert.equal(pauses, 1);
+  assert.equal(context.exerciseImageDialog.open, true);
+  assert.ok(context.exerciseImageDialogImage.src.startsWith("./assets/exercises/"));
+  assert.ok(context.exerciseImageDialogStatus.textContent.includes("press Resume"));
+  context.openExerciseIllustration({ id: "bw-push-up" });
+  assert.equal(pauses, 1);
+});
+
+test("a failed review image hides its button while the written exercise remains available", () => {
+  const nodes = [];
+  const context = vm.createContext({ EXERCISE_MEDIA: exerciseMedia, document: { createElement() {
+    const node = { children: [], handlers: {}, setAttribute() {}, addEventListener(name, callback) { this.handlers[name] = callback; }, append(...children) { this.children.push(...children); } };
+    nodes.push(node); return node;
+  } } });
+  vm.runInContext(contractSource, context);
+  const button = context.createExerciseImageButton({ id: "bw-squat", name: "Bodyweight squat" });
+  assert.equal(button.children[0].loading, "lazy");
+  button.children[0].handlers.error();
+  assert.equal(button.hidden, true);
+});
+
+test("offline precache includes the media map and every local exercise picture", () => {
+  const listeners = {};
+  const context = vm.createContext({ self: { addEventListener(name, handler) { listeners[name] = handler; } } });
+  context.importScripts = () => vm.runInContext(readFileSync(new URL("../exercise-media.js", import.meta.url), "utf8"), context);
+  vm.runInContext(readFileSync(new URL("../service-worker.js", import.meta.url), "utf8") + "\nself.testFiles = APP_FILES;", context);
+  for (const media of Object.values(exerciseMedia)) assert.ok(context.self.testFiles.includes(media.src));
+  assert.ok(context.self.testFiles.includes("./exercise-media.js?v=65"));
+  assert.equal(Object.keys(listeners).length, 3);
 });
 
 test("delayed timer ticks advance each elapsed exercise, including when a tick ends in rest", () => {
