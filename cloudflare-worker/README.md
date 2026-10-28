@@ -1,6 +1,6 @@
 # Circuit Timer AI Worker
 
-This Worker generates structured circuit plans for the GitHub Pages Circuit Timer.
+This Worker builds structured circuit plans for the GitHub Pages Circuit Timer.
 
 ## Runtime configuration
 
@@ -10,11 +10,11 @@ This Worker generates structured circuit plans for the GitHub Pages Circuit Time
 - API route: `POST /api/generate-workout`
 - Allowed browser origin: `https://kpmike87.github.io`
 
-The Worker uses Workers AI JSON Mode, then validates the model response before returning it. It does not use authentication, D1, KV, Durable Objects, or secrets.
+The Worker assembles and validates catalog circuits. Optional free text is interpreted with Workers AI JSON Mode before selection. It does not use authentication, D1, KV, Durable Objects, or secrets.
 
 ## Abuse protection
 
-Generation costs Workers AI neurons and takes 15 to 50 seconds, so the endpoint is protected before any request body is read:
+Custom-instruction interpretation consumes Workers AI neurons and may be slow. All requests share the existing protections, checked before the body is read:
 
 - Requests must send an allowed `Origin`. Requests with a missing or different origin get `403`.
 - `CLIENT_RATE_LIMIT`: 8 requests per 60 seconds per client IP.
@@ -34,20 +34,16 @@ npx wrangler deploy
 
 For Cloudflare Workers Builds, use this directory as the root directory and `npx wrangler deploy` as the deploy command. No build output directory is required.
 
-## Selection reliability and diagnostics
+## Catalog generation and AI instructions
 
-The model is explicitly listed as supporting [Workers AI JSON Mode](https://developers.cloudflare.com/workers-ai/features/json-mode/). The Worker assigns movement-category slots and supplies a JSON schema with only eligible IDs for each slot. AI still chooses the exercises and receives all free-text preferences. Runtime validation enforces distinct IDs, coverage, eligibility and repetition limits. One invalid response gets one corrective inference attempt; explicit inability to comply (422) and provider failures (503) are not retried. No unchecked or generic fallback plan is returned.
+Standard selections are assembled directly from validated catalog slots without a model call, including when the AI binding or upstream service is unavailable. Candidates are shuffled, then a complete matching search assigns distinct IDs, starting with narrow slots. This avoids random early choices consuming a later slot's only valid exercise. The result passes the same catalog, equipment, experience, movement coverage, timing, instruction and picture-ID validation as every other plan.
 
-Interpretation and selection attempts share a 50-second response budget, within the frontend's existing 60-second timeout. Timing out the response does not cancel an already submitted provider inference. Requests without free text use at most two inference calls; nonempty free text adds one interpretation call within the same deadline (at most three total calls per admitted request); existing HTTP rate limits are unchanged.
+Nonempty optional instructions are interpreted into known muscle groups, required exercise IDs and exclusions before slot allocation. Explicit muscle-only text overrides the preset focus; equipment, experience and common movement restrictions remain hard limits. Primary-muscle eligibility prevents biceps-only plans from filling with back rows that use biceps secondarily. Extra emphasis reserves two matching exercises where available. Small pools repeat a shorter valid list; impossible instructions return 422 rather than unrelated exercises.
 
-Error JSON includes a code and requestId. `AI_INVALID_SELECTION` (502) means both selections failed validation; `AI_SERVICE_UNAVAILABLE` (503) means inference threw; `AI_TIMEOUT` (503) means the response budget expired. Logs contain diagnostic codes and correlation IDs, not raw prompts, model responses, user instructions, or provider exception text. Check Workers logs and Workers AI usage for account-level failures.
+Custom instructions use one inference normally and at most two when the first interpretation is malformed. Both share a 50-second response budget within the frontend's 60-second timeout. Provider failures, timeouts and explicit refusals are not retried. Response timeout does not cancel an already submitted provider inference. Standard circuits use zero inference calls.
 
-The reported v65 error could originate from inference, parsing, or selection validation because all three previously shared one message. The specific production exception has not been observed; this repair targets the source-level reliability gaps rather than claiming a confirmed live root cause.
+Error JSON contains a diagnostic code and requestId. `AI_INVALID_INSTRUCTIONS` (502) means interpretation failed after one corrective retry. `AI_SERVICE_UNAVAILABLE` (503) and `AI_TIMEOUT` (503) identify upstream/customization failures. `GENERATION_ERROR` (500) means an unexpected server failure. Logs avoid raw prompts, user text, model output and provider exception details. There is no unchecked fallback or silent disregard of text instructions.
 
-## Optional instructions take effect before exercise selection
+Successful responses include `generatorVersion: "catalog-v1"`, `generationSource` (`catalog` or `ai-preferences/catalog-selection`), and a null `model` for standard circuits. These fields allow deployment and execution-path verification without changing the frontend workout contract. Runtime changes require only the existing Worker deployment, not a frontend cache update.
 
-Nonempty text is interpreted once with a constrained schema before the catalog slots are built. It can specify a muscle-only focus, additional emphasis, named required exercises, and excluded exercises. An explicit muscle-only request overrides the preset focus; it cannot expand selected equipment, experience, or common movement restrictions. Blank text skips this inference. Both phases and any selection retry share the existing 50-second budget.
-
-For example, `Give me one that just focuses on chest` with Full body selected resolves to chest-only choices. Primary muscle metadata determines eligibility, so biceps-only selects curls rather than back rows that involve biceps secondarily. Supporting muscles still participate in compound movements. Broader workouts with extra emphasis reserve two matching exercises where the catalog permits. The preview displays the resolved muscle focus using its existing notes area.
-
-A small eligible pool produces a shorter repeated sequence, never unrelated exercises to fill eight slots. Unsupported or conflicting instructions return an explanation; malformed interpretation returns `AI_INVALID_INSTRUCTIONS` (502), with no preset fallback. Interpretation is still model-dependent: tests mock it, and review remains necessary. Named exercises are limited to the existing catalog.
+The exact old production exception was not observed. The standard path now removes that class of model failure altogether. Tests exercise the actual Worker handler for all 105 equipment/focus/experience combinations with no AI binding and repeatedly run upper-body/bodyweight at each level. Natural-language interpretation remains model-dependent and is mocked in tests; live custom-instruction behavior must still be verified.
