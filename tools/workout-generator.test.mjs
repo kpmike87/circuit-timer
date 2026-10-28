@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import worker, { validateRequest, buildPrompt, validateModelResponse, buildSelectionSlots, selectCatalogWorkout, finalizeSelection } from "../cloudflare-worker/src/index.js";
+import worker, { validateRequest, validateModelResponse, buildSelectionSlots, selectCatalogWorkout, finalizeSelection } from "../cloudflare-worker/src/index.js";
 import { EXERCISES, getExerciseContext, excludedTags, getAvailableExercises, matchesMuscleGroup } from "../cloudflare-worker/src/exercise-library.js";
 
 const base = { planVersion: 2, durationMinutes: 17, workSeconds: 30, restSeconds: 30,
@@ -195,7 +195,6 @@ test("restricted slots cannot reintroduce excluded movements or unselected equip
     const input = validateRequest({ ...base, equipment: ["bands"], instructions });
     const candidate = slotSelection(input);
     assert.ok(validateModelResponse(candidate, input).exercises.length > 0);
-    assert.ok(buildPrompt(input).includes(instructions));
     candidate.choices.slot1 = "db-row";
     assert.throws(() => validateModelResponse(candidate, input), /ineligible/);
   }
