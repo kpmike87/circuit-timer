@@ -20,6 +20,8 @@ jobs:
           node --check app.js
           node --check service-worker.js
           node --check ai-config.js
+          node --check exercise-media.js
+          node --check tools/generate-exercise-media.mjs
           node --check cloudflare-worker/src/index.js
           node --check cloudflare-worker/src/exercise-library.js
       - name: Check asset-version and DOM invariants
