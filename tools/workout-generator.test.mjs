@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import worker, { validateRequest, buildPrompt, validateModelResponse } from "../cloudflare-worker/src/index.js";
+import worker, { validateRequest, buildPrompt, validateModelResponse, buildSelectionSlots, buildResponseFormat } from "../cloudflare-worker/src/index.js";
 import { EXERCISES, getExerciseContext, excludedTags } from "../cloudflare-worker/src/exercise-library.js";
 
 const base = { planVersion: 2, durationMinutes: 17, workSeconds: 30, restSeconds: 30,
@@ -137,7 +137,8 @@ test("Worker success keeps the API contract, restrictions, CORS and configured m
   const body = await response.json();
   assert.equal(body.workout.exercises.length, 8);
   assert.equal(body.workout.extraExercises, 1);
-  assert.equal(captured.model, "@cf/meta/llama-3.1-8b-instruct-fp8");
+  assert.equal(captured.model, "@cf/meta/llama-3.1-8b-instruct");
+  assert.equal(captured.options.response_format.type, "json_schema");
   assert.ok(captured.options.messages[1].content.includes("bw-push-up"));
   assert.ok(buildPrompt({ ...input, instructions: "Avoid jumping and keep it quiet" }).includes("Avoid jumping and keep it quiet"));
 });
@@ -158,6 +159,125 @@ test("unfulfillable instructions and invalid AI selections fail without returnin
   assert.equal((await worker.fetch(request(), environment({ cannotComply: true }))).status, 422);
   assert.equal((await worker.fetch(request(), environment({ title: "Bad", exerciseIds: ["invented"] }))).status, 502);
   assert.throws(() => validateRequest({ ...base, focus: "upper-body", instructions: "No floor. No overhead." , equipment: [] }));
+});
+
+// Production now asks for category-constrained slots, rather than relying on AI
+// to count and distribute movement patterns correctly in a free-form ID list.
+function slotSelection(input) {
+  const used = new Set();
+  const choices = Object.fromEntries(buildSelectionSlots(input).map((slot) => {
+    const id = slot.ids.find((item) => !used.has(item));
+    assert.ok(id, `No distinct choice for ${slot.key}`);
+    used.add(id);
+    return [slot.key, id];
+  }));
+  return { title: "Complete circuit", cannotComply: false, choices };
+}
+
+test("all equipment, focus and level combinations have feasible schema-constrained slots", () => {
+  const combinations = [["bodyweight"], ["dumbbells"], ["bands"], ["bodyweight", "dumbbells"],
+    ["bodyweight", "bands"], ["dumbbells", "bands"], ["bodyweight", "dumbbells", "bands"]];
+  for (const equipment of combinations) for (const difficulty of ["beginner", "intermediate", "advanced"])
+    for (const focus of ["full-body", "upper-body", "lower-body", "core", "cardio"])
+      for (const planVersion of [undefined, 2]) {
+        const input = validateRequest({ ...base, equipment, difficulty, focus, planVersion });
+        const slots = buildSelectionSlots(input);
+        const format = buildResponseFormat(input);
+        assert.equal(slots.length, input.exerciseCount);
+        assert.deepEqual(format.json_schema.properties.choices.required, slots.map((slot) => slot.key));
+        for (const slot of slots) assert.deepEqual(format.json_schema.properties.choices.properties[slot.key].enum, [...slot.ids, ""]);
+        assert.equal(validateModelResponse(slotSelection(input), input).exercises.length, input.exerciseCount);
+      }
+});
+
+test("restricted slots cannot reintroduce excluded movements or unselected equipment", () => {
+  for (const instructions of ["Standing only. No jumping. No squats.", "No floor. No overhead.", "No kneeling. No push-ups."]) {
+    const input = validateRequest({ ...base, equipment: ["bands"], instructions });
+    const candidate = slotSelection(input);
+    assert.ok(validateModelResponse(candidate, input).exercises.length > 0);
+    assert.ok(buildPrompt(input).includes(instructions));
+    candidate.choices.slot1 = "db-row";
+    assert.throws(() => validateModelResponse(candidate, input), /ineligible/);
+  }
+});
+
+test("recovers malformed JSON, duplicates, missing categories and legacy model output with one corrective attempt", async () => {
+  const input = validateRequest(base);
+  const duplicate = selection(input);
+  duplicate.exerciseIds[1] = duplicate.exerciseIds[0];
+  const missing = { title: "Wrong schema", exercises: [{ name: "Squat", instructions: "Squat" }] };
+  const wrongCategory = slotSelection(input);
+  wrongCategory.choices.slot1 = "bw-push-up";
+  for (const invalid of ["{broken JSON", duplicate, missing, wrongCategory]) {
+    let calls = 0;
+    const env = environment(null);
+    env.AI.run = async (_model, options) => {
+      calls++;
+      if (calls === 2) {
+        assert.ok(options.messages[1].content.includes("previous response failed validation"));
+        assert.equal(options.response_format.type, "json_schema");
+      }
+      return { response: calls === 1 ? invalid : JSON.stringify(slotSelection(input)) };
+    };
+    const response = await worker.fetch(request(), env);
+    assert.equal(response.status, 200);
+    assert.equal(calls, 2);
+    assert.equal((await response.json()).workout.exercises.length, 8);
+  }
+});
+
+test("successful schema response needs one inference and preserves trusted picture IDs", async () => {
+  const input = validateRequest(base);
+  let calls = 0;
+  const response = await worker.fetch(request(), environment(slotSelection(input), () => { calls++; }));
+  assert.equal(response.status, 200);
+  assert.equal(calls, 1);
+  assert.ok((await response.json()).workout.exercises.every((item) => EXERCISES.some((entry) => entry.id === item.id)));
+});
+
+test("invalid selections stop after two calls; service failures and refusals do not retry", async () => {
+  let calls = 0;
+  let response = await worker.fetch(request(), environment({ title: "Invalid", choices: {} }, () => { calls++; }));
+  assert.equal(response.status, 502);
+  let body = await response.json();
+  assert.equal(body.code, "AI_INVALID_SELECTION");
+  assert.ok(body.requestId);
+  assert.equal(calls, 2);
+  calls = 0;
+  response = await worker.fetch(request(), environment({ cannotComply: true }, () => { calls++; }));
+  assert.equal(response.status, 422);
+  assert.equal(calls, 1);
+  calls = 0;
+  const env = environment(null);
+  env.AI.run = async () => { calls++; throw new Error("private provider details"); };
+  response = await worker.fetch(request(), env);
+  body = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(body.code, "AI_SERVICE_UNAVAILABLE");
+  assert.equal(calls, 1);
+  assert.ok(!JSON.stringify(body).includes("private provider details"));
+});
+
+test("inference attempts share one deadline inside the browser request timeout", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async () => {
+    calls++;
+    if (calls === 1) {
+      t.mock.timers.tick(49_000);
+      return { response: "not JSON" };
+    }
+    return new Promise(() => {});
+  };
+  const pending = worker.fetch(request(), env);
+  await new Promise(setImmediate);
+  assert.equal(calls, 2);
+  t.mock.timers.tick(1_000);
+  const response = await pending;
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).code, "AI_TIMEOUT");
+  assert.equal(calls, 2);
 });
 
 // Run actual frontend functions without needing a browser or duplicating their
