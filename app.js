@@ -26,6 +26,15 @@ const historyClearButton = document.querySelector("#historyClearButton");
 const aiBuilderToggle = document.querySelector("#aiBuilderToggle");
 const exerciseLabel = document.querySelector("#exerciseLabel");
 const exerciseInstructions = document.querySelector("#exerciseInstructions");
+const exerciseImageButton = document.querySelector("#exerciseImageButton");
+const exerciseImage = document.querySelector("#exerciseImage");
+const exerciseImageDialog = document.querySelector("#exerciseImageDialog");
+const exerciseImageDialogTitle = document.querySelector("#exerciseImageDialogTitle");
+const exerciseImageDialogImage = document.querySelector("#exerciseImageDialogImage");
+const exerciseImageDialogInstructions = document.querySelector("#exerciseImageDialogInstructions");
+const exerciseImageDialogStatus = document.querySelector("#exerciseImageDialogStatus");
+const exerciseImageDialogClose = document.querySelector("#exerciseImageDialogClose");
+const EXERCISE_MEDIA = window.CIRCUIT_TIMER_MEDIA || Object.freeze({});
 const builderScreen = document.querySelector("#builderScreen");
 const aiBuilderForm = document.querySelector("#aiBuilderForm");
 const aiDuration = document.querySelector("#aiDuration");
@@ -41,6 +50,8 @@ const aiPreviewTitle = document.querySelector("#aiPreviewTitle");
 const aiPreviewMeta = document.querySelector("#aiPreviewMeta");
 const aiExerciseList = document.querySelector("#aiExerciseList");
 const aiSafetyNote = document.querySelector("#aiSafetyNote");
+const aiEffortGuidance = document.querySelector("#aiEffortGuidance");
+const aiCoverageNotes = document.querySelector("#aiCoverageNotes");
 const aiEditButton = document.querySelector("#aiEditButton");
 const loadAiWorkoutButton = document.querySelector("#loadAiWorkoutButton");
 const timerTab = document.querySelector("#timerTab");
@@ -348,12 +359,27 @@ function syncExerciseDisplay() {
   if (!state.plan || state.plan.exercises.length === 0) {
     exerciseLabel.textContent = "";
     exerciseInstructions.textContent = "";
+    exerciseImageButton.hidden = true;
+    exerciseImage.removeAttribute("src");
+    exerciseImage.alt = "";
+    app.dataset.hasExerciseMedia = "false";
     return;
   }
 
   const exercise = state.plan.exercises[state.currentExerciseIndex % state.plan.exercises.length];
   exerciseLabel.textContent = exercise.name;
   exerciseInstructions.textContent = exercise.instructions;
+  const media = getExerciseMedia(exercise);
+  exerciseImageButton.hidden = !media;
+  app.dataset.hasExerciseMedia = String(Boolean(media));
+  if (media) {
+    if (exerciseImage.getAttribute("src") !== media.src) exerciseImage.src = media.src;
+    exerciseImage.alt = media.alt;
+    exerciseImageButton.setAttribute("aria-label", `View ${exercise.name} picture; pauses a running workout`);
+  } else {
+    exerciseImage.removeAttribute("src");
+    exerciseImage.alt = "";
+  }
 }
 
 function getSelectedFocus() {
@@ -368,6 +394,7 @@ function getSelectedEquipment() {
 
 function getBuilderRequest() {
   return {
+    planVersion: 2,
     durationMinutes: Number(aiDuration.value),
     workSeconds: Number(aiWorkSeconds.value),
     restSeconds: Number(aiRestSeconds.value),
@@ -509,6 +536,7 @@ function validateAIPlan(candidate, request) {
     !safetyNote ||
     exercises.length < 1 ||
     exercises.length > 8 ||
+    exercises.length > totalSeconds / cycleSeconds ||
     totalSeconds % cycleSeconds !== 0
   ) {
     throw new Error("The AI returned a workout that did not pass validation.");
@@ -523,14 +551,14 @@ function validateAIPlan(candidate, request) {
     if (!name || !instructions) {
       throw new Error("The AI returned an incomplete exercise.");
     }
-    return { name, instructions };
+    return {
+      name, instructions,
+      id: typeof exercise.id === "string" ? exercise.id.slice(0, 80) : "",
+      muscles: cleanAITextList(exercise.muscles, 6, 50),
+    };
   });
 
   const intervalCount = totalSeconds / cycleSeconds;
-  if (intervalCount % cleanedExercises.length !== 0) {
-    throw new Error("The AI returned an exercise list that does not fit the timer.");
-  }
-
   return {
     title,
     safetyNote,
@@ -539,30 +567,111 @@ function validateAIPlan(candidate, request) {
     durationSeconds: totalSeconds,
     workSeconds: request.workSeconds,
     restSeconds: request.restSeconds,
-    rounds: intervalCount / cleanedExercises.length,
+    rounds: Math.floor(intervalCount / cleanedExercises.length),
+    extraExercises: intervalCount % cleanedExercises.length,
+    totalIntervals: intervalCount,
+    effortGuidance: typeof candidate.effortGuidance === "string" ? candidate.effortGuidance.slice(0, 300) : "",
+    coverageNotes: cleanAITextList(candidate.coverageNotes, 3, 300),
     difficulty: request.difficulty,
     focus: request.focus,
     equipment: request.equipment,
   };
 }
 
+function cleanAITextList(value, limit, length) {
+  return Array.isArray(value)
+    ? value.filter((item) => typeof item === "string").slice(0, limit).map((item) => item.trim().slice(0, length)).filter(Boolean)
+    : [];
+}
+
+function formatAIRounds(plan) {
+  const full = `${plan.rounds} full round${plan.rounds === 1 ? "" : "s"}`;
+  return plan.extraExercises
+    ? `${full} + ${plan.extraExercises} exercise${plan.extraExercises === 1 ? "" : "s"}`
+    : full;
+}
+
+function getExerciseMedia(exercise) {
+  return typeof exercise?.id === "string" && Object.hasOwn(EXERCISE_MEDIA, exercise.id)
+    ? EXERCISE_MEDIA[exercise.id]
+    : null;
+}
+
+function openExerciseIllustration(exercise) {
+  const media = getExerciseMedia(exercise);
+  if (!media || exerciseImageDialog.open) return;
+  if (state.running) pauseOrResume();
+  exerciseImageDialogTitle.textContent = exercise.name;
+  exerciseImageDialogImage.hidden = false;
+  exerciseImageDialogImage.src = media.src;
+  exerciseImageDialogImage.alt = media.alt;
+  exerciseImageDialogInstructions.textContent = exercise.instructions;
+  exerciseImageDialogStatus.textContent = state.paused
+    ? "Workout paused. Close this picture and press Resume when you are ready."
+    : "Two static positions illustrate the movement. Follow the written instructions for pacing and switching sides.";
+  exerciseImageDialog.showModal();
+}
+
+function createExerciseImageButton(exercise) {
+  const media = getExerciseMedia(exercise);
+  if (!media) return null;
+  const button = document.createElement("button");
+  const picture = document.createElement("img");
+  const hint = document.createElement("span");
+  button.type = "button";
+  button.className = "exercise-image-button";
+  button.setAttribute("aria-label", `View ${exercise.name} picture`);
+  picture.src = media.src;
+  picture.alt = media.alt;
+  picture.width = 560;
+  picture.height = 310;
+  picture.loading = "lazy";
+  picture.decoding = "async";
+  hint.className = "exercise-image-hint";
+  hint.textContent = "View larger";
+  picture.addEventListener("error", () => { button.hidden = true; });
+  button.addEventListener("click", () => openExerciseIllustration(exercise));
+  button.append(picture, hint);
+  return button;
+}
+
 function renderAIPlan(plan) {
   aiPreviewTitle.textContent = plan.title;
   aiPreviewMeta.textContent =
-    `${plan.durationMinutes} minutes · ${plan.rounds} rounds · ` +
+    `${plan.durationMinutes} minutes · ${formatAIRounds(plan)} · ` +
     `${AI_DIFFICULTY_LABELS[plan.difficulty]} · ${AI_FOCUS_LABELS[plan.focus]}`;
   aiExerciseList.textContent = "";
 
   plan.exercises.forEach((exercise) => {
     const item = document.createElement("li");
+    const copy = document.createElement("div");
     const name = document.createElement("strong");
     const instructions = document.createElement("span");
+    item.className = "exercise-review-card";
+    copy.className = "exercise-review-copy";
     name.textContent = exercise.name;
     instructions.textContent = exercise.instructions;
-    item.append(name, instructions);
+    copy.append(name, instructions);
+    if (exercise.muscles?.length) {
+      const muscles = document.createElement("span");
+      muscles.textContent = `Works: ${exercise.muscles.join(", ")}`;
+      copy.appendChild(muscles);
+    }
+    const pictureButton = createExerciseImageButton(exercise);
+    if (pictureButton) item.appendChild(pictureButton);
+    item.appendChild(copy);
     aiExerciseList.appendChild(item);
   });
 
+  aiEffortGuidance.textContent = plan.effortGuidance ? `Effort: ${plan.effortGuidance}` : "";
+  aiEffortGuidance.hidden = !plan.effortGuidance;
+  aiCoverageNotes.textContent = "";
+  (plan.coverageNotes || []).forEach((note) => {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = note;
+    aiCoverageNotes.appendChild(paragraph);
+  });
+  aiCoverageNotes.hidden = !plan.coverageNotes?.length;
   aiSafetyNote.textContent = plan.safetyNote;
   aiPreview.hidden = false;
 }
@@ -816,6 +925,9 @@ function advancePhase(now) {
 
   while (now >= state.endTime && transitionCount < 500) {
     const nextPhase = state.phase === "work" ? "rest" : "work";
+    if (nextPhase === "work" && state.plan) {
+      state.currentExerciseIndex = (state.currentExerciseIndex + 1) % state.plan.exercises.length;
+    }
     setPhase(nextPhase);
     state.endTime += getDurationMs(nextPhase);
     transitionCount += 1;
@@ -826,11 +938,6 @@ function advancePhase(now) {
   }
 
   if (transitionCount > 0) {
-    if (state.phase === "work" && state.plan) {
-      state.currentExerciseIndex =
-        (state.currentExerciseIndex + 1) % state.plan.exercises.length;
-      syncExerciseDisplay();
-    }
     playPhaseTone(state.phase);
     vibratePattern(state.phase === "work" ? [80, 60, 80] : [120]);
   }
@@ -1194,6 +1301,20 @@ document.addEventListener("visibilitychange", () => {
 
 window.addEventListener("beforeunload", releaseWakeLock);
 
+exerciseImageButton.addEventListener("click", () => {
+  const exercise = state.plan?.exercises[state.currentExerciseIndex % state.plan.exercises.length];
+  if (exercise) openExerciseIllustration(exercise);
+});
+exerciseImageDialogClose.addEventListener("click", () => exerciseImageDialog.close());
+exerciseImage.addEventListener("error", () => {
+  exerciseImageButton.hidden = true;
+  app.dataset.hasExerciseMedia = "false";
+});
+exerciseImageDialogImage.addEventListener("error", () => {
+  exerciseImageDialogImage.hidden = true;
+  exerciseImageDialogStatus.textContent = "Picture unavailable. Follow the written exercise instructions below.";
+});
+
 loadSettings();
 syncSoundToggle();
 syncExerciseDisplay();
@@ -1211,6 +1332,6 @@ syncNavigationState();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=63").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=65").catch(() => {});
   });
 }

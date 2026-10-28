@@ -1,12 +1,16 @@
-const CACHE_NAME = "circuit-timer-v63";
+importScripts("./exercise-media.js?v=65");
+
+const CACHE_NAME = "circuit-timer-v65";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=63",
-  "./ai-config.js?v=63",
-  "./app.js?v=63",
+  "./styles.css?v=65",
+  "./ai-config.js?v=65",
+  "./app.js?v=65",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./exercise-media.js?v=65",
+  ...Object.values(self.CIRCUIT_TIMER_MEDIA).map((entry) => entry.src),
 ];
 
 self.addEventListener("install", (event) => {
