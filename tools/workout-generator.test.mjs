@@ -2,14 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import worker, { validateRequest, buildPrompt, validateModelResponse, buildSelectionSlots, buildResponseFormat, finalizeSelection } from "../cloudflare-worker/src/index.js";
+import worker, { validateRequest, buildPrompt, validateModelResponse, buildSelectionSlots, selectCatalogWorkout, finalizeSelection } from "../cloudflare-worker/src/index.js";
 import { EXERCISES, getExerciseContext, excludedTags, getAvailableExercises, matchesMuscleGroup } from "../cloudflare-worker/src/exercise-library.js";
 
 const base = { planVersion: 2, durationMinutes: 17, workSeconds: 30, restSeconds: 30,
   difficulty: "intermediate", focus: "full-body", equipment: ["bodyweight"], instructions: "" };
 
-// A predictable stand-in for AI, so contract and timer tests do not consume
-// metered inference. Live-model behavior must be checked on the preview Worker.
+// Contract fixtures and AI-intent doubles. Standard-generation tests exercise
+// the real Worker/catalog selector without an AI binding or model inference.
 function selection(input) {
   const { eligible, requiredPatterns, maxPatternRepeat } = getExerciseContext(input);
   const selected = requiredPatterns.map((pattern) => eligible.find((item) => item.pattern === pattern));
@@ -128,19 +128,20 @@ test("uses trusted catalog instructions instead of model-authored movement subst
   assert.ok(plan.coverageNotes.some((note) => note.includes("loaded row")));
 });
 
-test("Worker success keeps the API contract, restrictions, CORS and configured model", async () => {
-  const input = validateRequest(base);
-  let captured;
-  const response = await worker.fetch(request(), environment(selection(input), (model, options) => { captured = { model, options }; }));
+test("standard Worker generation does not depend on AI availability and preserves the API", async () => {
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async () => { calls++; throw new Error("Upstream unavailable"); };
+  const response = await worker.fetch(request(), env);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Access-Control-Allow-Origin"), "https://kpmike87.github.io");
   const body = await response.json();
   assert.equal(body.workout.exercises.length, 8);
   assert.equal(body.workout.extraExercises, 1);
-  assert.equal(captured.model, "@cf/meta/llama-3.1-8b-instruct");
-  assert.equal(captured.options.response_format.type, "json_schema");
-  assert.ok(captured.options.messages[1].content.includes("bw-push-up"));
-  assert.ok(buildPrompt({ ...input, instructions: "Avoid jumping and keep it quiet" }).includes("Avoid jumping and keep it quiet"));
+  assert.equal(body.model, null);
+  assert.equal(body.generationSource, "catalog");
+  assert.equal(body.generatorVersion, "catalog-v1");
+  assert.equal(calls, 0);
 });
 
 test("Worker preserves forbidden-origin, invalid-input and rate-limit behavior before inference", async () => {
@@ -155,10 +156,11 @@ test("Worker preserves forbidden-origin, invalid-input and rate-limit behavior b
   assert.equal(calls, 0);
 });
 
-test("unfulfillable instructions and invalid AI selections fail without returning an unchecked fallback", async () => {
-  assert.equal((await worker.fetch(request(), environment({ cannotComply: true }))).status, 422);
-  assert.equal((await worker.fetch(request(), environment({ title: "Bad", exerciseIds: ["invented"] }))).status, 502);
-  assert.throws(() => validateRequest({ ...base, focus: "upper-body", instructions: "No floor. No overhead." , equipment: [] }));
+test("custom instructions fail clearly rather than falling back to a preset", async () => {
+  const body = { ...base, instructions: "Custom instructions" };
+  assert.equal((await worker.fetch(request(body), environment({ cannotComply: true }))).status, 422);
+  assert.equal((await worker.fetch(request(body), environment({ title: "Wrong schema" }))).status, 502);
+  assert.throws(() => validateRequest({ ...base, equipment: [] }));
 });
 
 // Production now asks for category-constrained slots, rather than relying on AI
@@ -174,7 +176,7 @@ function slotSelection(input) {
   return { title: "Complete circuit", cannotComply: false, choices };
 }
 
-test("all equipment, focus and level combinations have feasible schema-constrained slots", () => {
+test("all equipment, focus and level combinations have feasible catalog slots", () => {
   const combinations = [["bodyweight"], ["dumbbells"], ["bands"], ["bodyweight", "dumbbells"],
     ["bodyweight", "bands"], ["dumbbells", "bands"], ["bodyweight", "dumbbells", "bands"]];
   for (const equipment of combinations) for (const difficulty of ["beginner", "intermediate", "advanced"])
@@ -182,10 +184,8 @@ test("all equipment, focus and level combinations have feasible schema-constrain
       for (const planVersion of [undefined, 2]) {
         const input = validateRequest({ ...base, equipment, difficulty, focus, planVersion });
         const slots = buildSelectionSlots(input);
-        const format = buildResponseFormat(input);
         assert.equal(slots.length, input.exerciseCount);
-        assert.deepEqual(format.json_schema.properties.choices.required, slots.map((slot) => slot.key));
-        for (const slot of slots) assert.deepEqual(format.json_schema.properties.choices.properties[slot.key].enum, [...slot.ids, ""]);
+        assert.equal(selectCatalogWorkout(input).exercises.length, input.exerciseCount);
         assert.equal(validateModelResponse(slotSelection(input), input).exercises.length, input.exerciseCount);
       }
 });
@@ -201,64 +201,65 @@ test("restricted slots cannot reintroduce excluded movements or unselected equip
   }
 });
 
-test("recovers malformed JSON, duplicates, missing categories and legacy model output with one corrective attempt", async () => {
-  const input = validateRequest(base);
-  const duplicate = selection(input);
-  duplicate.exerciseIds[1] = duplicate.exerciseIds[0];
-  const missing = { title: "Wrong schema", exercises: [{ name: "Squat", instructions: "Squat" }] };
-  const wrongCategory = slotSelection(input);
-  wrongCategory.choices.slot1 = "bw-push-up";
-  for (const invalid of ["{broken JSON", duplicate, missing, wrongCategory]) {
-    let calls = 0;
-    const env = environment(null);
-    env.AI.run = async (_model, options) => {
-      calls++;
-      if (calls === 2) {
-        assert.ok(options.messages[1].content.includes("previous response failed validation"));
-        assert.equal(options.response_format.type, "json_schema");
-      }
-      return { response: calls === 1 ? invalid : JSON.stringify(slotSelection(input)) };
-    };
-    const response = await worker.fetch(request(), env);
+test("standard circuits succeed without an AI binding across all 105 equipment/focus/experience choices", async () => {
+  const combinations = [["bodyweight"], ["dumbbells"], ["bands"], ["bodyweight", "dumbbells"],
+    ["bodyweight", "bands"], ["dumbbells", "bands"], ["bodyweight", "dumbbells", "bands"]];
+  const env = { CLIENT_RATE_LIMIT: { limit: async () => ({ success: true }) }, GLOBAL_RATE_LIMIT: { limit: async () => ({ success: true }) } };
+  for (const equipment of combinations) for (const difficulty of ["beginner", "intermediate", "advanced"])
+    for (const focus of ["full-body", "upper-body", "lower-body", "core", "cardio"]) {
+      const response = await worker.fetch(request({ ...base, equipment, difficulty, focus }), env);
+      assert.equal(response.status, 200, `${equipment}/${difficulty}/${focus}`);
+      const body = await response.json();
+      const input = validateRequest({ ...base, equipment, difficulty, focus });
+      const { eligible, requiredPatterns } = getExerciseContext(input);
+      assert.equal(body.workout.exercises.length, input.exerciseCount);
+      assert.equal(new Set(body.workout.exercises.map((item) => item.id)).size, input.exerciseCount);
+      assert.ok(body.workout.exercises.every((item) => eligible.some((entry) => entry.id === item.id)));
+      for (const pattern of requiredPatterns) assert.ok(body.workout.exercises.some((item) => item.pattern === pattern));
+    }
+});
+
+test("reported upper-body/bodyweight case succeeds repeatedly at every experience level without inference", async () => {
+  let calls = 0;
+  const env = environment(null, () => { calls++; });
+  for (const difficulty of ["beginner", "intermediate", "advanced"]) for (let repeat = 0; repeat < 20; repeat++) {
+    const body = { ...base, durationMinutes: 15, workSeconds: 30, restSeconds: 15, focus: "upper-body", equipment: ["bodyweight"], difficulty };
+    const response = await worker.fetch(request(body), env);
     assert.equal(response.status, 200);
-    assert.equal(calls, 2);
-    assert.equal((await response.json()).workout.exercises.length, 8);
+    const plan = (await response.json()).workout;
+    assert.ok(plan.exercises.every((item) => ["push", "pull", "shoulder", "arms"].includes(item.pattern)));
+    assert.ok(plan.exercises.every((item) => item.equipment.length === 0));
+    assert.equal(plan.rounds * plan.exercises.length + plan.extraExercises, 20);
   }
+  assert.equal(calls, 0);
 });
 
-test("successful schema response needs one inference and preserves trusted picture IDs", async () => {
-  const input = validateRequest(base);
+test("invalid instruction interpretation retries once; provider failures and refusals do not retry", async () => {
+  const body = { ...base, instructions: "Custom workout please" };
   let calls = 0;
-  const response = await worker.fetch(request(), environment(slotSelection(input), () => { calls++; }));
-  assert.equal(response.status, 200);
-  assert.equal(calls, 1);
-  assert.ok((await response.json()).workout.exercises.every((item) => EXERCISES.some((entry) => entry.id === item.id)));
-});
-
-test("invalid selections stop after two calls; service failures and refusals do not retry", async () => {
-  let calls = 0;
-  let response = await worker.fetch(request(), environment({ title: "Invalid", choices: {} }, () => { calls++; }));
+  let response = await worker.fetch(request(body), environment({}, () => { calls++; }));
   assert.equal(response.status, 502);
-  let body = await response.json();
-  assert.equal(body.code, "AI_INVALID_SELECTION");
-  assert.ok(body.requestId);
+  assert.equal((await response.json()).code, "AI_INVALID_INSTRUCTIONS");
   assert.equal(calls, 2);
   calls = 0;
-  response = await worker.fetch(request(), environment({ cannotComply: true }, () => { calls++; }));
+  response = await worker.fetch(request(body), environment({ cannotComply: true }, () => { calls++; }));
   assert.equal(response.status, 422);
   assert.equal(calls, 1);
   calls = 0;
   const env = environment(null);
   env.AI.run = async () => { calls++; throw new Error("private provider details"); };
-  response = await worker.fetch(request(), env);
-  body = await response.json();
+  response = await worker.fetch(request(body), env);
+  const failed = await response.json();
   assert.equal(response.status, 503);
-  assert.equal(body.code, "AI_SERVICE_UNAVAILABLE");
+  assert.equal(failed.code, "AI_SERVICE_UNAVAILABLE");
   assert.equal(calls, 1);
-  assert.ok(!JSON.stringify(body).includes("private provider details"));
+  assert.ok(!JSON.stringify(failed).includes("private provider details"));
+  const noAi = await worker.fetch(request(body), {});
+  assert.equal(noAi.status, 503);
+  assert.ok((await noAi.json()).error.includes("Clear the optional instructions"));
 });
 
-test("inference attempts share one deadline inside the browser request timeout", async (t) => {
+test("instruction retry attempts share one deadline inside the browser request timeout", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
   let calls = 0;
   const env = environment(null);
@@ -270,7 +271,7 @@ test("inference attempts share one deadline inside the browser request timeout",
     }
     return new Promise(() => {});
   };
-  const pending = worker.fetch(request(), env);
+  const pending = worker.fetch(request({ ...base, instructions: "Custom workout" }), env);
   await new Promise(setImmediate);
   assert.equal(calls, 2);
   t.mock.timers.tick(1_000);
@@ -290,30 +291,23 @@ function resolvedInput(body, interpreted) {
   return finalizeSelection(input);
 }
 
-test("exact chest-only example is interpreted before selection and overrides a conflicting preset", async () => {
+test("exact chest-only example uses one interpretation and overrides a conflicting preset", async () => {
   const body = { ...base, instructions: "Give me one that just focuses on chest" };
   const interpreted = intent({ targetMode: "only", targetMuscles: ["chest"] });
-  const expected = resolvedInput(body, interpreted);
-  assert.equal(expected.exerciseCount, 2);
   let calls = 0;
-  const env = environment(null);
-  env.AI.run = async (_model, options) => {
+  const env = environment(interpreted, (model, options) => {
     calls++;
-    if (calls === 1) {
-      assert.equal(options.response_format.json_schema.properties.targetMode.type, "string");
-      assert.equal(JSON.parse(options.messages[1].content).instructions, body.instructions);
-      return { response: interpreted };
-    }
-    const slots = options.response_format.json_schema.properties.choices.properties;
-    for (const slot of Object.values(slots)) for (const id of slot.enum.filter(Boolean))
-      assert.ok(matchesMuscleGroup(EXERCISES.find((item) => item.id === id), "chest"));
-    assert.ok(options.messages[1].content.includes("intentional muscle-focused circuit"));
-    return { response: slotSelection(expected) };
-  };
+    assert.equal(model, "@cf/meta/llama-3.1-8b-instruct");
+    assert.equal(options.response_format.type, "json_schema");
+    assert.equal(JSON.parse(options.messages[1].content).instructions, body.instructions);
+  });
   const response = await worker.fetch(request(body), env);
   assert.equal(response.status, 200);
-  assert.equal(calls, 2);
-  const plan = (await response.json()).workout;
+  assert.equal(calls, 1);
+  const result = await response.json();
+  assert.equal(result.generationSource, "ai-preferences/catalog-selection");
+  const plan = result.workout;
+  assert.equal(plan.exercises.length, 2);
   assert.ok(plan.exercises.every((item) => item.muscles[0] === "Chest"));
   assert.ok(plan.coverageNotes.some((note) => note.includes("Requested focus: chest")));
   assert.ok(!plan.coverageNotes.some((note) => note.includes("full-body coverage") || note.includes("loaded row")));
@@ -371,7 +365,7 @@ test("uninterpretable, contradictory and unavailable instructions fail without r
     const response = await worker.fetch(request(body), environment(candidate, () => { calls++; }));
     assert.equal(response.status, 502);
     assert.equal((await response.json()).code, "AI_INVALID_INSTRUCTIONS");
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
   }
   for (const candidate of [intent({ cannotComply: true }), intent({ requiredExerciseIds: ["bw-squat"], excludedExerciseIds: ["bw-squat"] }), intent({ targetMode: "only", targetMuscles: ["biceps"] })]) {
     assert.equal((await worker.fetch(request(body), environment(candidate))).status, 422);
@@ -382,42 +376,35 @@ test("uninterpretable, contradictory and unavailable instructions fail without r
   assert.ok(getExerciseContext(input).eligible.some((item) => item.pattern === "hip"));
 });
 
-test("instruction interpretation shares the response deadline and cannot trigger an unbounded extra inference", async (t) => {
+test("slow custom interpretation times out once and never substitutes an unrelated standard circuit", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
   let calls = 0;
   const env = environment(null);
-  env.AI.run = async () => {
-    calls++;
-    if (calls === 1) {
-      t.mock.timers.tick(49_000);
-      return { response: intent({ targetMode: "only", targetMuscles: ["chest"] }) };
-    }
-    return new Promise(() => {});
-  };
+  env.AI.run = async () => { calls++; return new Promise(() => {}); };
   const pending = worker.fetch(request({ ...base, instructions: "Chest only" }), env);
   await new Promise(setImmediate);
-  assert.equal(calls, 2);
-  t.mock.timers.tick(1_000);
+  t.mock.timers.tick(50_000);
   const response = await pending;
-  assert.equal((await response.json()).code, "AI_TIMEOUT");
-  assert.equal(calls, 2);
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(body.code, "AI_TIMEOUT");
+  assert.equal(body.workout, undefined);
+  assert.equal(calls, 1);
 });
 
-test("free-text interpretation runs once even when exercise selection needs a corrective retry", async () => {
+test("a malformed custom interpretation is corrected once before catalog selection", async () => {
   const body = { ...base, instructions: "Give me one that just focuses on chest" };
-  const interpreted = intent({ targetMode: "only", targetMuscles: ["chest"] });
-  const expected = resolvedInput(body, interpreted);
   let calls = 0;
   const env = environment(null);
   env.AI.run = async (_model, options) => {
     calls++;
-    if (calls === 1) return { response: interpreted };
-    assert.ok(options.messages[1].content.includes(body.instructions));
-    return { response: calls === 2 ? { title: "Incomplete", choices: {} } : slotSelection(expected) };
+    if (calls === 1) return { response: "not JSON" };
+    assert.ok(JSON.parse(options.messages[1].content).correction.includes("previous interpretation"));
+    return { response: intent({ targetMode: "only", targetMuscles: ["chest"] }) };
   };
   const response = await worker.fetch(request(body), env);
   assert.equal(response.status, 200);
-  assert.equal(calls, 3);
+  assert.equal(calls, 2);
   assert.ok((await response.json()).workout.exercises.every((item) => item.muscles[0] === "Chest"));
 });
 
