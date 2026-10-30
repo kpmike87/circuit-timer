@@ -20,7 +20,7 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 - Summary feedback scales from playfully harsh to highly enthusiastic based on completion percentage
 - Back to Ready returns to the timer setup
 - Start/end and pause/resume controls
-- Ready-screen Reset clears every timer and setting to zero
+- Ready-screen Reset clears manual timer settings to zero; with a loaded circuit it restores that circuit’s intervals
 - Zero-valued settings clear automatically when tapped for immediate typing
 - Screen wake lock when supported
 - Sound cues with a mute toggle: distinct tones for work and rest, countdown ticks for the final three seconds, a completion chime, and vibration on supporting devices
@@ -33,7 +33,7 @@ A mobile-first work/rest interval timer built with plain HTML, CSS, and JavaScri
 ## AI Circuit Builder
 
 The GitHub Pages frontend calls `POST /api/generate-workout` on the separately deployed Worker in `cloudflare-worker/`.
-The Worker builds standard circuits directly from its validated exercise catalog. Optional free-text instructions use `@cf/meta/llama-3.1-8b-instruct` in JSON mode to interpret the requested focus and restrictions before catalog selection. It returns exercise order, work/rest intervals, rounds, equipment, and safety notes.
+The Worker builds standard circuits directly from its validated exercise catalog. Direct requests such as "Chest only", named exercises and common movement exclusions are parsed completely before selection without inference. Other optional free-text instructions use `@cf/meta/llama-3.1-8b-instruct` in JSON mode to interpret the requested focus and restrictions before catalog selection. It returns exercise order, work/rest intervals, rounds, equipment, and safety notes.
 Generation is metered, so the Worker only answers requests from the published site origin and rate limits them. See `cloudflare-worker/README.md` for the limits.
 
 After deploying the Worker, set its HTTPS URL in `ai-config.js`:

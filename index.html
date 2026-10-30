@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Circuit" />
-    <link rel="stylesheet" href="./styles.css?v=65" />
+    <link rel="stylesheet" href="./styles.css?v=66" />
     <title>Circuit Timer</title>
   </head>
   <body>
@@ -216,7 +216,7 @@
 
           <p class="builder-disclaimer">AI-generated workouts are general fitness suggestions, not medical or professional fitness advice. Stop if something hurts.</p>
           <p class="builder-error" id="aiBuilderError" role="alert"></p>
-          <button class="primary-button builder-submit" id="generateWorkoutButton" type="submit">Generate Workout with AI</button>
+          <button class="primary-button builder-submit" id="generateWorkoutButton" type="submit">Generate Workout</button>
           <p class="builder-status" id="aiGeneratingStatus" role="status" hidden>
             <span class="builder-spinner" aria-hidden="true"></span>
             <span id="aiGeneratingStatusText">Building your circuit…</span>
@@ -226,7 +226,7 @@
         <div class="builder-preview" id="aiPreview" hidden>
           <div class="builder-preview-heading">
             <p class="eyebrow">REVIEW YOUR CIRCUIT</p>
-            <h3 id="aiPreviewTitle">Your AI workout</h3>
+            <h3 id="aiPreviewTitle" tabindex="-1">Your AI workout</h3>
             <p id="aiPreviewMeta"></p>
           </div>
           <ol class="builder-exercise-list" id="aiExerciseList"></ol>
@@ -250,8 +250,8 @@
       <img id="exerciseImageDialogImage" width="560" height="310" alt="" />
       <p id="exerciseImageDialogInstructions"></p>
     </dialog>
-    <script src="./exercise-media.js?v=65"></script>
-    <script src="./ai-config.js?v=65"></script>
-    <script src="./app.js?v=65" defer></script>
+    <script src="./exercise-media.js?v=66"></script>
+    <script src="./ai-config.js?v=66"></script>
+    <script src="./app.js?v=66" defer></script>
   </body>
 </html>
