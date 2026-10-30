@@ -6,11 +6,11 @@ This Worker builds structured circuit plans for the GitHub Pages Circuit Timer.
 
 - Worker name: `circuit-timer`
 - AI binding: `AI`
-- Model: `@cf/meta/llama-3.1-8b-instruct`
+- Model: `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
 - API route: `POST /api/generate-workout`
 - Allowed browser origin: `https://kpmike87.github.io`
 
-The Worker assembles and validates catalog circuits. Optional free text is interpreted with Workers AI JSON Mode before selection. It does not use authentication, D1, KV, Durable Objects, or secrets.
+The Worker assembles and validates catalog circuits. Fully recognized direct requests are parsed without inference; other optional free text is interpreted with Workers AI JSON Mode before selection. It does not use authentication, D1, KV, Durable Objects, or secrets.
 
 ## Abuse protection
 
@@ -40,10 +40,10 @@ Standard selections are assembled directly from validated catalog slots without 
 
 Nonempty optional instructions are interpreted into known muscle groups, required exercise IDs and exclusions before slot allocation. Explicit muscle-only text overrides the preset focus; equipment, experience and common movement restrictions remain hard limits. Primary-muscle eligibility prevents biceps-only plans from filling with back rows that use biceps secondarily. Extra emphasis reserves two matching exercises where available. Small pools repeat a shorter valid list; impossible instructions return 422 rather than unrelated exercises.
 
-Custom instructions use one inference normally and at most two when the first interpretation is malformed. Both share a 50-second response budget within the frontend's 60-second timeout. Provider failures, timeouts and explicit refusals are not retried. Response timeout does not cancel an already submitted provider inference. Standard circuits use zero inference calls.
+AI-interpreted instructions use one inference normally and at most two when the first interpretation is malformed. Both share a 50-second response budget within the frontend's 60-second timeout. Provider failures, timeouts and explicit refusals are not retried. Response timeout does not cancel an already submitted provider inference. Standard circuits and fully parsed direct instructions use zero inference calls. The direct parser accepts the entire request or defers it to AI; it never drops unknown clauses.
 
-Error JSON contains a diagnostic code and requestId. `AI_INVALID_INSTRUCTIONS` (502) means interpretation failed after one corrective retry. `AI_SERVICE_UNAVAILABLE` (503) and `AI_TIMEOUT` (503) identify upstream/customization failures. `GENERATION_ERROR` (500) means an unexpected server failure. Logs avoid raw prompts, user text, model output and provider exception details. There is no unchecked fallback or silent disregard of text instructions.
+Error JSON contains a diagnostic code and requestId. `AI_INVALID_INSTRUCTIONS` (502) means interpretation failed after one corrective retry. `AI_SERVICE_UNAVAILABLE` (503) and `AI_TIMEOUT` (503) identify upstream/customization failures. `GENERATION_ERROR` (500) means an unexpected server failure. Provider failures may also include a numeric `providerCode` and finite `providerReason`; raw provider exceptions are never returned. Logs avoid raw prompts, user text, model output and provider exception details. There is no unchecked fallback or silent disregard of text instructions.
 
-Successful responses include `generatorVersion: "catalog-v1"`, `generationSource` (`catalog` or `ai-preferences/catalog-selection`), and a null `model` for standard circuits. These fields allow deployment and execution-path verification without changing the frontend workout contract. Runtime changes require only the existing Worker deployment, not a frontend cache update.
+Successful responses include `generatorVersion: "catalog-v2"`, `generationSource` (`catalog`, `parsed-preferences/catalog-selection` or `ai-preferences/catalog-selection`), and a null `model` for standard circuits and direct parsed requests. These fields allow deployment and execution-path verification without changing the frontend workout contract. Runtime changes require only the existing Worker deployment, not a frontend cache update.
 
-The exact old production exception was not observed. The standard path now removes that class of model failure altogether. Tests exercise the actual Worker handler for all 105 equipment/focus/experience combinations with no AI binding and repeatedly run upper-body/bodyweight at each level. Natural-language interpretation remains model-dependent and is mocked in tests; live custom-instruction behavior must still be verified.
+Live production diagnostics on October 30, 2026 identified error 5028 and the `model_retired` category for the old Llama 3.1 model. The configured replacement must be verified using a real AI-interpreted request after deployment; catalog-only tests do not verify model availability. Tests exercise the actual Worker handler for all 105 equipment/focus/experience combinations with no AI binding and repeatedly run upper-body/bodyweight at each level. Natural-language interpretation remains model-dependent and is mocked in tests; live custom-instruction behavior must still be verified.
