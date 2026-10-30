@@ -72,12 +72,13 @@ const MINIMUM_PATTERNS = { "full-body": 8, "upper-body": 4, "lower-body": 3, cor
 // Conservative handling of common explicit exclusions. Other instructions are
 // passed to AI verbatim and must also be respected; this is not medical screening.
 export function excludedTags(instructions) {
-  const text = instructions.toLowerCase().replace(/[’]/g, "'").replace(/[-_]/g, " ");
+  const text = instructions.toLowerCase().replace(/[’]/g, "'").replace(/[-_]/g, " ")
+    .replace(/\b(?:don't|do not)\s+(?:avoid|skip|exclude)\b/g, "prefer");
   const excluded = new Set();
-  const negative = "(?:no|avoid|skip|without|exclude|do not|don't)\\s+(?:any\\s+)?";
+  const negative = "(?:no|avoid|skip|without|exclude|do not|don't)(?:\\s+want(?: to)?)?(?:\\s+(?:do|doing|use|include|putting))?\\s+(?:(?:any|all)\\s+)?(?:(?:exercises?|movements?|anything)(?:\\s+(?:with|on|involving|that involves?|that includes?))?\\s+)?(?:the\\s+)?";
   const rules = {
     impact: "jump(?:ing|s)?|hopping|high impact",
-    floor: "floor(?: work| exercises?)?|lying(?: down)?|ground(?: work| exercises?)?",
+    floor: "floor(?: work| exercises?)?|lying(?: down)?|lie(?: down)?|ground(?: work| exercises?)?",
     kneeling: "kneeling|kneel(?:ing)?",
     overhead: "overhead(?: work| movements?| exercises?)?",
     squat: "squats?|squatting",
@@ -91,6 +92,7 @@ export function excludedTags(instructions) {
   }
   if (/\b(?:low impact|apartment friendly)\b/.test(text)) excluded.add("impact");
   if (/\b(?:standing only|only standing|stay standing|keep (?:it |everything )?standing)\b/.test(text)) excluded.add("floor");
+  if (/\b(?:stay|keep)(?: (?:me|myself|it|everything))? off (?:the )?(?:ground|floor)\b/.test(text)) excluded.add("floor");
   return excluded;
 }
 
