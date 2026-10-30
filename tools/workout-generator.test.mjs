@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import worker, { validateRequest, validateModelResponse, buildSelectionSlots, selectCatalogWorkout, finalizeSelection, parseKnownInstructions } from "../cloudflare-worker/src/index.js";
+import worker, { validateRequest, validateModelResponse, buildSelectionSlots, selectCatalogWorkout, finalizeSelection, parseKnownInstructions, explicitOnlyMuscles } from "../cloudflare-worker/src/index.js";
 import { EXERCISES, getExerciseContext, excludedTags, getAvailableExercises, matchesMuscleGroup } from "../cloudflare-worker/src/exercise-library.js";
 
 const base = { planVersion: 2, durationMinutes: 17, workSeconds: 30, restSeconds: 30,
@@ -768,4 +768,76 @@ test("provider diagnostics classify failures without revealing their raw text", 
     assert.equal(result.providerCode, code);
     assert.ok(!JSON.stringify(result).includes("private payload"));
   }
+});
+
+
+test("explicit muscle-only wording is enforced even when AI proposes broader emphasis", async () => {
+  for (const instructions of ["Design a session emphasizing only my chest please", "I would like a workout solely on my chest", "Build something targeting my chest only, please"]) {
+    const env = environment(intent({ targetMode: "emphasize", targetMuscles: ["chest"] }), (_model, options) => {
+      assert.deepEqual(JSON.parse(options.messages[1].content).explicitOnlyMuscles, ["chest"]);
+    });
+    const response = await worker.fetch(request({ ...base, instructions }), env);
+    assert.equal(response.status, 200, instructions);
+    const result = await response.json();
+    assert.equal(result.generationSource, "ai-preferences/catalog-selection");
+    assert.equal(result.workout.focusLabel, "Chest");
+    assert.ok(result.workout.exercises.every((exercise) => matchesMuscleGroup(exercise, "chest")));
+    assert.ok(!result.workout.coverageNotes.some((note) => note.includes("Extra focus")));
+  }
+});
+
+test("conversational jumping and ground exclusions filter the catalog before inference", async () => {
+  const instructions = "I'd like to stay off the ground and avoid anything with jumping.";
+  for (const equipment of [["bodyweight"], ["dumbbells"], ["bands"]]) for (const focus of ["full-body", "upper-body", "lower-body", "core", "cardio"]) {
+    const env = environment(intent(), (_model, options) => {
+      const catalog = JSON.parse(options.messages[1].content).catalog;
+      assert.ok(catalog.every((item) => !item.tags.includes("floor") && !item.tags.includes("impact")));
+    });
+    const response = await worker.fetch(request({ ...base, focus, equipment, instructions }), env);
+    assert.equal(response.status, 200);
+    const plan = (await response.json()).workout;
+    assert.ok(plan.exercises.every((item) => !EXERCISES.find((entry) => entry.id === item.id).tags.some((tag) => ["floor", "impact"].includes(tag))));
+  }
+  for (const phrase of ["Avoid anything with jumping", "No exercises involving jumping", "I don't want to do any jumping", "Avoid movements that involve jumping", "Do not include jumping"])
+    assert.ok(excludedTags(phrase).has("impact"), phrase);
+  assert.equal(excludedTags("Do not avoid jumping").has("impact"), false);
+});
+
+test("only-focus extraction respects negation, multiple targets and contradictory instructions", async () => {
+  for (const phrase of ["Not only chest but also back", "I don't want to target only chest", "Chest only if there are dumbbells"])
+    assert.deepEqual(explicitOnlyMuscles(phrase), [], phrase);
+  assert.deepEqual(explicitOnlyMuscles("Only chest, back, and shoulders"), ["chest", "back", "shoulders"]);
+  assert.deepEqual(explicitOnlyMuscles("Avoid squats and only chest"), ["chest"]);
+  const response = await worker.fetch(request({ ...base, instructions: "Chest only. Back only." }), {});
+  assert.equal(response.status, 422);
+  const conflicting = await worker.fetch(request({ ...base, instructions: "Design a session emphasizing only my chest please" }), environment(intent({ targetMode: "only", targetMuscles: ["back"] })));
+  assert.equal(conflicting.status, 422);
+});
+
+
+test("AI case and exact catalog-name normalization cannot introduce untrusted exercises", async () => {
+  const body = { ...base, equipment: ["dumbbells"], instructions: "I'd like chest with extra attention and some dumbbell curls included" };
+  const response = await worker.fetch(request(body), environment(intent({ targetMode: "EMPHASIZE", targetMuscles: ["Chest"], requiredExerciseIds: ["Dumbbell curl"] })));
+  assert.equal(response.status, 200);
+  const plan = (await response.json()).workout;
+  assert.ok(plan.exercises.some((exercise) => exercise.id === "db-curl"));
+  assert.ok(plan.exercises.filter((exercise) => matchesMuscleGroup(exercise, "chest")).length >= 2);
+  for (const requiredExerciseIds of [["Invented curl"], ["barbell-curl"]])
+    assert.equal((await worker.fetch(request(body), environment(intent({ requiredExerciseIds })))).status, 502);
+});
+
+test("corrective inference identifies the rejected field category without sending raw output", async () => {
+  let calls = 0;
+  const env = environment(null);
+  env.AI.run = async (_model, options) => {
+    calls++;
+    if (calls === 1) return { response: intent({ targetMuscles: ["chest"] }) };
+    const payload = JSON.parse(options.messages[1].content);
+    assert.ok(payload.correction.includes("muscle_focus"));
+    assert.ok(!payload.correction.includes("private model output"));
+    return { response: intent({ targetMode: "emphasize", targetMuscles: ["chest"], requiredExerciseIds: ["db-curl"] }) };
+  };
+  const response = await worker.fetch(request({ ...base, equipment: ["dumbbells"], instructions: "I'd like a full body circuit with extra attention to my chest and dumbbell curls included" }), env);
+  assert.equal(response.status, 200);
+  assert.equal(calls, 2);
 });
