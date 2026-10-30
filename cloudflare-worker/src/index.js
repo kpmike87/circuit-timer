@@ -46,7 +46,7 @@ export default {
 
       const input = validateRequest(await request.json(), true);
       const workout = await generateWorkout(input, env, requestId);
-      return json({ workout, model: input.instructions ? MODEL : null, generationSource: input.instructions ? "ai-preferences/catalog-selection" : "catalog", generatorVersion: "catalog-v1" }, 200, cors);
+      return json({ workout, model: input.instructionSource === "ai" ? MODEL : null, generationSource: input.instructionSource === "ai" ? "ai-preferences/catalog-selection" : input.instructions ? "parsed-preferences/catalog-selection" : "catalog", generatorVersion: "catalog-v2" }, 200, cors);
     } catch (error) {
       const code = error instanceof GenerationError ? error.code
         : error instanceof InputError ? "INVALID_REQUEST" : "GENERATION_ERROR";
@@ -57,7 +57,7 @@ export default {
         error instanceof InputError || error instanceof GenerationError
           ? error.message
           : "The circuit builder encountered a problem. Please try again.";
-      return json({ error: message, code, requestId }, status, cors);
+      return json({ error: message, code, requestId, ...(error.providerCode ? { providerCode: error.providerCode } : {}) }, status, cors);
     }
   },
 };
@@ -137,7 +137,11 @@ async function runInference(env, options, remainingMs) {
     ]);
   } catch (error) {
     if (error instanceof GenerationError) throw error;
-    throw new GenerationError("The AI service is temporarily unavailable. Please try again shortly.", "AI_SERVICE_UNAVAILABLE");
+    const failure = new GenerationError("The AI service could not interpret these instructions. Your previous workout is unchanged. Try a direct request such as 'Chest only' or 'Standing only. No jumping.'", "AI_SERVICE_UNAVAILABLE");
+    // Only a numeric provider code is exposed, never raw exceptions or prompts.
+    const match = String(error?.message || "").match(/\b(?:AiError|AI error|error code)[: ]+(\d{4})\b/i);
+    if (match) failure.providerCode = match[1];
+    throw failure;
   } finally {
     clearTimeout(timeout);
   }
@@ -235,19 +239,83 @@ export function selectCatalogWorkout(input) {
   return validateModelResponse({ title: `${titleFocus[0].toUpperCase()}${titleFocus.slice(1)} circuit`, exerciseIds: orderedIds }, input);
 }
 
+// Handle a deliberately small, fully understood grammar without inference.
+// Every clause must match; unknown qualifiers go to AI, never get discarded.
+export function parseKnownInstructions(input) {
+  if (!input.instructions) return null;
+  const available = getAvailableExercises({ ...input, instructions: "" });
+  const intent = { targetMode: "preset", targetMuscles: [], requiredExerciseIds: [], excludedExerciseIds: [] };
+  const aliases = {
+    chest: ["chest"], back: ["back"], shoulder: ["shoulders"], shoulders: ["shoulders"],
+    bicep: ["biceps"], biceps: ["biceps"], tricep: ["triceps"], triceps: ["triceps"],
+    arm: ["biceps", "triceps"], arms: ["biceps", "triceps"],
+    quad: ["quads"], quads: ["quads"], quadriceps: ["quads"],
+    hamstring: ["hamstrings"], hamstrings: ["hamstrings"], glute: ["glutes"], glutes: ["glutes"],
+    calf: ["calves"], calves: ["calves"], abs: ["core"], abdominals: ["core"], core: ["core"],
+    legs: ["quads", "hamstrings", "glutes", "calves"],
+  };
+  const groups = (value) => {
+    const words = value.replace(/\s+(?:exercises?|workouts?|circuits?)$/, "").split(/\s*(?:,|\band\b|&)\s*/);
+    return words.length && words.every((word) => Object.hasOwn(aliases, word)) ? [...new Set(words.flatMap((word) => aliases[word]))] : null;
+  };
+  const text = input.instructions.toLowerCase().replace(/[’]/g, "'").replace(/[-_]/g, " ").trim();
+  const clauses = text.split(/[.!;]+|,\s*(?=(?:no |avoid |skip |without |include |exclude ))|\s+(?:and|but)\s+(?=(?:no |avoid |skip |without |include |exclude |only |standing ))/).map((value) => value.trim()).filter(Boolean);
+  if (!clauses.length) return null;
+  for (let clause of clauses) {
+    clause = clause.replace(/^please\s+/, "").replace(/\s+please$/, "")
+      .replace(/^give me (?:one|a workout|a circuit)(?: that)?\s+/, "")
+      .replace(/^i want (?:a workout(?: that)? )?/, "");
+    let match;
+    if (/^(?:(?:no|avoid|skip|without|exclude|do not|don't) (?:any )?(?:jump(?:ing|s)?|hopping|high impact|floor(?: work| exercises?)?|lying(?: down)?|ground(?: work| exercises?)?|kneeling|overhead(?: work| movements?| exercises?)?|squats?|squatting|lunges?|lunging|push ?ups?|planks?|wrist loading|weight (?:on|through) (?:my |the )?wrists?)|low impact|apartment friendly|standing only|only standing|stay standing|keep (?:it |everything )?standing)$/.test(clause)) {
+      continue; // The catalog's exclusion filters enforce these exact clauses.
+    }
+    if ((match = clause.match(/^(?:no|avoid|skip|exclude) (.+)$/))) {
+      const excluded = groups(match[1]);
+      if (!excluded) return null;
+      intent.excludedExerciseIds.push(...available.filter((item) => excluded.some((group) => matchesMuscleGroup(item, group))).map((item) => item.id));
+      continue;
+    }
+    if ((match = clause.match(/^include (.+)$/))) {
+      const name = match[1].replace(/\s+(?:exercises?)$/, "");
+      const exercise = available.find((item) => item.name.toLowerCase().replace(/[-_]/g, " ") === name);
+      if (!exercise) return null;
+      intent.requiredExerciseIds.push(exercise.id);
+      continue;
+    }
+    const explicitPreset = clause.match(/^(full body|upper body|lower body|core|cardio) with /);
+    if (explicitPreset && explicitPreset[1] !== input.focus.replaceAll("-", " ")) return null;
+    const emphasis = clause.match(/^(?:(?:full body|upper body|lower body|core|cardio) with )?(?:extra|more) (?:(?:focus|attention) (?:on )?)?(.+)$/);
+    const only = clause.match(/^(?:just )?focus(?:es|ing)?(?: only)? on (?:just |only )?(.+)$/)
+      || clause.match(/^(?:only|just) (.+)$/) || clause.match(/^(.+?) only$/);
+    const target = groups((emphasis || only)?.[1]?.replace(/ only$/, "") || "");
+    if (!target || intent.targetMuscles.length) return null;
+    intent.targetMode = emphasis ? "emphasize" : "only";
+    intent.targetMuscles = target;
+  }
+  intent.requiredExerciseIds = [...new Set(intent.requiredExerciseIds)];
+  intent.excludedExerciseIds = [...new Set(intent.excludedExerciseIds)];
+  return intent;
+}
+
 async function generateWorkout(input, env, requestId) {
   if (input.instructions) {
-    if (!env.AI) throw new GenerationError("AI instructions are temporarily unavailable. Clear the optional instructions to build a circuit from your selections.", "AI_SERVICE_UNAVAILABLE");
-    const deadline = Date.now() + GENERATION_BUDGET_MS;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        input.instructionIntent = await interpretInstructions(input, env, deadline, attempt);
-        break;
-      } catch (error) {
-        if (!(error instanceof GenerationError) || error.code !== "AI_INVALID_INSTRUCTIONS" || attempt === 1) throw error;
-        console.warn("Workout instruction interpretation rejected:", JSON.stringify({ requestId, attempt: attempt + 1 }));
+    input.instructionIntent = parseKnownInstructions(input);
+    input.instructionSource = input.instructionIntent ? "parsed" : "ai";
+    if (!input.instructionIntent) {
+      if (!env.AI) throw new GenerationError("AI instructions are temporarily unavailable. Clear the optional instructions or use a direct request such as 'Chest only'.", "AI_SERVICE_UNAVAILABLE");
+      const deadline = Date.now() + GENERATION_BUDGET_MS;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          input.instructionIntent = await interpretInstructions(input, env, deadline, attempt);
+          break;
+        } catch (error) {
+          if (!(error instanceof GenerationError) || error.code !== "AI_INVALID_INSTRUCTIONS" || attempt === 1) throw error;
+          console.warn("Workout instruction interpretation rejected:", JSON.stringify({ requestId, attempt: attempt + 1 }));
+        }
       }
     }
+    if (input.instructionIntent.requiredExerciseIds.some((id) => input.instructionIntent.excludedExerciseIds.includes(id)))
+      throw new InputError("These instructions both include and exclude the same exercise. Adjust your instructions.", 422);
     finalizeSelection(input);
   }
   return selectCatalogWorkout(input);
@@ -476,6 +544,7 @@ export function validateModelResponse(candidate, input) {
     totalIntervals: input.intervalCount,
     difficulty: input.difficulty,
     focus: input.focus,
+    focusLabel: input.instructionIntent?.targetMode === "only" ? context.targetMuscles.map((group) => group[0].toUpperCase() + group.slice(1)).join(" and ") : "",
     equipment: input.equipment,
     exercises,
     effortGuidance: effortGuidanceFor(input),
