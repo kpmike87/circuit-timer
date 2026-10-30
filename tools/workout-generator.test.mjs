@@ -292,14 +292,8 @@ function resolvedInput(body, interpreted) {
 
 test("exact chest-only example needs no AI interpretation and overrides a conflicting preset", async () => {
   const body = { ...base, instructions: "Give me one that just focuses on chest" };
-  const interpreted = intent({ targetMode: "only", targetMuscles: ["chest"] });
   let calls = 0;
-  const env = environment(interpreted, (model, options) => {
-    calls++;
-    assert.equal(model, "@cf/meta/llama-3.1-8b-instruct");
-    assert.equal(options.response_format.type, "json_schema");
-    assert.equal(JSON.parse(options.messages[1].content).instructions, body.instructions);
-  });
+  const env = environment(null, () => { calls++; });
   const response = await worker.fetch(request(body), env);
   assert.equal(response.status, 200);
   assert.equal(calls, 0);
@@ -397,6 +391,9 @@ test("a malformed custom interpretation is corrected once before catalog selecti
   const env = environment(null);
   env.AI.run = async (_model, options) => {
     calls++;
+    assert.equal(_model, "@cf/meta/llama-3.3-70b-instruct-fp8-fast");
+    assert.equal(options.response_format.type, "json_schema");
+    assert.equal(JSON.parse(options.messages[1].content).instructions, body.instructions);
     if (calls === 1) return { response: "not JSON" };
     assert.ok(JSON.parse(options.messages[1].content).correction.includes("previous interpretation"));
     return { response: intent({ targetMode: "only", targetMuscles: ["chest"] }) };

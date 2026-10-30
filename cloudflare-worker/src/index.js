@@ -1,7 +1,8 @@
 import { getExerciseContext, effortGuidanceFor, getAvailableExercises, MUSCLE_GROUPS, matchesMuscleGroup } from "./exercise-library.js";
 
-// Use a model explicitly listed as supporting Workers AI JSON Mode.
-const MODEL = "@cf/meta/llama-3.1-8b-instruct";
+// llama-3.1-8b-instruct returned production error 5028 (retired).
+// This replacement is listed in Cloudflare’s supported JSON Mode models.
+const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const GENERATION_BUDGET_MS = 50_000;
 const MAX_INSTRUCTIONS_LENGTH = 240;
 const ALLOWED_ORIGINS = new Set(["https://kpmike87.github.io"]);
