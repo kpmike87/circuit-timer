@@ -87,6 +87,8 @@ const state = {
   soundOn: true,
   lastTickSecond: 0,
   plan: null,
+  previewPlan: null,
+  generating: false,
   preAiManualSettings: null,
   currentExerciseIndex: 0,
 };
@@ -224,9 +226,9 @@ function setPhase(phase) {
 }
 
 function setInputsDisabled(disabled) {
-  workInput.disabled = disabled;
-  restInput.disabled = disabled;
-  totalDurationInput.disabled = disabled;
+  workInput.disabled = disabled || Boolean(state.plan);
+  restInput.disabled = disabled || Boolean(state.plan);
+  totalDurationInput.disabled = disabled || Boolean(state.plan);
 }
 
 function saveSettings() {
@@ -428,7 +430,7 @@ function syncBuilderDurationOptions() {
 
 function populateBuilder() {
   syncBuilderDurationOptions();
-  aiInstructionsCount.textContent = `0 / ${AI_MAX_INSTRUCTIONS_LENGTH}`;
+  aiInstructionsCount.textContent = `${aiInstructions.value.length} / ${AI_MAX_INSTRUCTIONS_LENGTH}`;
 }
 
 function showBuilderError(message) {
@@ -445,7 +447,8 @@ function setView(name) {
 }
 
 function syncNavigationState() {
-  const locked = state.running || state.paused;
+  const locked = state.running || state.paused || state.generating;
+  timerTab.disabled = state.generating;
   const view = app.dataset.view;
   timerTab.setAttribute("aria-current", view === "timer" || view === "summary" ? "page" : "false");
   aiBuilderToggle.setAttribute("aria-current", view === "builder" ? "page" : "false");
@@ -468,7 +471,7 @@ function syncAiLoadedBanner() {
 }
 
 function clearAIPlan() {
-  if (state.running || state.paused) return;
+  if (state.running || state.paused || state.generating) return;
   state.plan = null;
   state.currentExerciseIndex = 0;
   exerciseLabel.textContent = "";
@@ -505,7 +508,7 @@ function stopGenerationStatus() {
 }
 
 function openBuilder() {
-  if (state.running || state.paused) return;
+  if (state.running || state.paused || state.generating) return;
   populateBuilder();
   clearBuilderError();
   setView("builder");
@@ -514,7 +517,7 @@ function openBuilder() {
 }
 
 function goToTimerView() {
-  if (state.running || state.paused) return;
+  if (state.running || state.paused || state.generating) return;
   if (app.dataset.view === "timer") return;
   returnToReady();
 }
@@ -574,6 +577,7 @@ function validateAIPlan(candidate, request) {
     coverageNotes: cleanAITextList(candidate.coverageNotes, 3, 300),
     difficulty: request.difficulty,
     focus: request.focus,
+    focusLabel: typeof candidate.focusLabel === "string" ? candidate.focusLabel.slice(0, 100) : "",
     equipment: request.equipment,
   };
 }
@@ -639,7 +643,7 @@ function renderAIPlan(plan) {
   aiPreviewTitle.textContent = plan.title;
   aiPreviewMeta.textContent =
     `${plan.durationMinutes} minutes · ${formatAIRounds(plan)} · ` +
-    `${AI_DIFFICULTY_LABELS[plan.difficulty]} · ${AI_FOCUS_LABELS[plan.focus]}`;
+    `${AI_DIFFICULTY_LABELS[plan.difficulty]} · ${(plan.focusLabel || AI_FOCUS_LABELS[plan.focus])}`;
   aiExerciseList.textContent = "";
 
   plan.exercises.forEach((exercise) => {
@@ -678,6 +682,7 @@ function renderAIPlan(plan) {
 
 async function generateAIWorkout(event) {
   event.preventDefault();
+  if (state.generating || state.running || state.paused) return;
   clearBuilderError();
 
   if (!AI_WORKER_URL) {
@@ -691,7 +696,11 @@ async function generateAIWorkout(event) {
     return;
   }
 
+  state.previewPlan = null;
   aiPreview.hidden = true;
+  state.generating = true;
+  syncNavigationState();
+  aiBuilderForm.querySelectorAll("input, select, textarea").forEach((control) => { control.disabled = true; });
   generateWorkoutButton.disabled = true;
   generateWorkoutButton.setAttribute("aria-busy", "true");
   generateWorkoutButton.textContent = "Generating...";
@@ -708,20 +717,29 @@ async function generateAIWorkout(event) {
       signal: controller.signal,
     });
     const body = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(body?.error || "The workout builder could not be reached.");
+    if (!response.ok) {
+      const error = new Error(body?.error || "The workout builder could not be reached.");
+      error.requestId = body?.requestId;
+      error.providerCode = body?.providerCode;
+      throw error;
+    }
 
     const plan = validateAIPlan(body?.workout, request);
-    state.plan = plan;
-    state.currentExerciseIndex = 0;
+    state.previewPlan = plan;
     renderAIPlan(plan);
+    aiPreviewTitle.focus();
+    aiPreview.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     showBuilderError(describeAIError(error));
   } finally {
     window.clearTimeout(timeoutId);
     stopGenerationStatus();
+    state.generating = false;
+    aiBuilderForm.querySelectorAll("input, select, textarea").forEach((control) => { control.disabled = false; });
+    syncNavigationState();
     generateWorkoutButton.disabled = false;
     generateWorkoutButton.setAttribute("aria-busy", "false");
-    generateWorkoutButton.textContent = "Generate Workout with AI";
+    generateWorkoutButton.textContent = "Generate Workout";
   }
 }
 
@@ -738,13 +756,15 @@ function describeAIError(error) {
       : "You are offline. The AI builder needs a connection, but your timer still works.";
   }
 
-  return error instanceof Error && error.message
+  const message = error instanceof Error && error.message
     ? error.message
     : "The workout builder is unavailable right now. Your timer still works.";
+  return error?.requestId ? `${message} Reference: ${error.requestId}${error.providerCode ? ` (AI ${error.providerCode})` : ""}.` : message;
 }
 
 function loadAIPlanIntoTimer() {
-  if (!state.plan) return;
+  if (!state.previewPlan || state.generating || state.running || state.paused) return;
+  state.plan = state.previewPlan;
 
   if (!state.preAiManualSettings) {
     state.preAiManualSettings = {
@@ -766,6 +786,7 @@ function loadAIPlanIntoTimer() {
 }
 
 function editAIPlan() {
+  state.previewPlan = null;
   aiPreview.hidden = true;
   clearBuilderError();
   aiInstructions.focus();
@@ -875,7 +896,7 @@ function renderHistory() {
 }
 
 function openHistory() {
-  if (state.running || state.paused) return;
+  if (state.running || state.paused || state.generating) return;
   renderHistory();
   setView("history");
   document.title = "Workout History - Circuit Timer";
@@ -1159,6 +1180,17 @@ function returnToReady() {
 
 function resetReadyTimers() {
   if (state.phase !== "idle" || state.running || state.paused) return;
+  if (state.plan) {
+    workInput.value = String(state.plan.workSeconds);
+    restInput.value = String(state.plan.restSeconds);
+    totalDurationInput.value = String(state.plan.durationMinutes);
+    [workInput, restInput, totalDurationInput].forEach(syncSettingInputWidth);
+    state.currentExerciseIndex = 0;
+    state.totalDurationMs = state.plan.durationMinutes * 60 * 1000;
+    returnToReady();
+    saveSettings();
+    return;
+  }
 
   workInput.value = "0";
   restInput.value = "0";
@@ -1260,6 +1292,18 @@ historyList.addEventListener("click", (event) => {
 });
 aiBuilderToggle.addEventListener("click", openBuilder);
 aiBuilderForm.addEventListener("submit", generateAIWorkout);
+aiBuilderForm.addEventListener("input", () => {
+  if (state.generating) return;
+  state.previewPlan = null;
+  aiPreview.hidden = true;
+  clearBuilderError();
+});
+aiBuilderForm.addEventListener("change", () => {
+  if (state.generating) return;
+  state.previewPlan = null;
+  aiPreview.hidden = true;
+  clearBuilderError();
+});
 aiWorkSeconds.addEventListener("change", syncBuilderDurationOptions);
 aiRestSeconds.addEventListener("change", syncBuilderDurationOptions);
 aiInstructions.addEventListener("input", () => {
@@ -1332,6 +1376,6 @@ syncNavigationState();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js?v=65").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=66").catch(() => {});
   });
 }

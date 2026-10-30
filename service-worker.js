@@ -1,15 +1,15 @@
-importScripts("./exercise-media.js?v=65");
+importScripts("./exercise-media.js?v=66");
 
-const CACHE_NAME = "circuit-timer-v65";
+const CACHE_NAME = "circuit-timer-v66";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=65",
-  "./ai-config.js?v=65",
-  "./app.js?v=65",
+  "./styles.css?v=66",
+  "./ai-config.js?v=66",
+  "./app.js?v=66",
   "./manifest.webmanifest",
   "./icon.svg",
-  "./exercise-media.js?v=65",
+  "./exercise-media.js?v=66",
   ...Object.values(self.CIRCUIT_TIMER_MEDIA).map((entry) => entry.src),
 ];
 
