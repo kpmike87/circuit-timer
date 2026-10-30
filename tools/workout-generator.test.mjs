@@ -753,3 +753,22 @@ test("hidden previews obey the hidden attribute and reopening the builder preser
   ui.populateBuilder();
   assert.equal(ui.aiInstructionsCount.textContent, "10 / 240");
 });
+
+
+test("provider diagnostics classify failures without revealing their raw text", async () => {
+  const cases = [
+    ["Error: 5028: Model is deprecated; private payload", "model_retired", "5028"],
+    ['{"code":3036,"message":"daily free allocation exceeded; private payload"}', "quota", "3036"],
+    ["JSON Mode couldn't be met; private payload", "structured_output", undefined],
+    ["Unrecognized private payload", "unknown", undefined],
+  ];
+  for (const [message, reason, code] of cases) {
+    const env = environment(null);
+    env.AI.run = async () => { throw new Error(message); };
+    const response = await worker.fetch(request({ ...base, instructions: "Design a session emphasizing only my chest please" }), env);
+    const result = await response.json();
+    assert.equal(result.providerReason, reason);
+    assert.equal(result.providerCode, code);
+    assert.ok(!JSON.stringify(result).includes("private payload"));
+  }
+});
