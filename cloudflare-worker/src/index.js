@@ -57,7 +57,7 @@ export default {
         error instanceof InputError || error instanceof GenerationError
           ? error.message
           : "The circuit builder encountered a problem. Please try again.";
-      return json({ error: message, code, requestId, ...(error.providerCode ? { providerCode: error.providerCode } : {}) }, status, cors);
+      return json({ error: message, code, requestId, ...(error.providerCode ? { providerCode: error.providerCode } : {}), ...(error.providerReason ? { providerReason: error.providerReason } : {}) }, status, cors);
     }
   },
 };
@@ -138,9 +138,33 @@ async function runInference(env, options, remainingMs) {
   } catch (error) {
     if (error instanceof GenerationError) throw error;
     const failure = new GenerationError("The AI service could not interpret these instructions. Your previous workout is unchanged. Try a direct request such as 'Chest only' or 'Standing only. No jumping.'", "AI_SERVICE_UNAVAILABLE");
-    // Only a numeric provider code is exposed, never raw exceptions or prompts.
-    const match = String(error?.message || "").match(/\b(?:AiError|AI error|error code)[: ]+(\d{4})\b/i);
-    if (match) failure.providerCode = match[1];
+    // Return only numeric codes and finite categories, never raw exception text.
+    const message = String(error?.message || error || "");
+    const directCode = error?.code ?? error?.cause?.code ?? error?.errors?.[0]?.code;
+    const match = message.match(/(?:\b(?:AiError|AI error|error(?:_| )?code)|"code")[\s:"=]+(\d{4})\b/i)
+      || message.match(/(?:^|\bError:\s*)(\d{4})\s*:/);
+    if (/^\d{4}$/.test(String(directCode))) failure.providerCode = String(directCode);
+    else if (match) failure.providerCode = match[1];
+    const categories = [
+      ["model_retired", /deprecat|retired|no longer (?:available|supported)/i],
+      ["quota", /daily (?:free )?(?:allocation|limit)|quota|neurons.*(?:exceed|limit)|allocation.*(?:exceed|exhaust)/i],
+      ["structured_output", /json mode|json schema|response_format|grammar/i],
+      ["model_unavailable", /no such model|invalid model|model.*not found/i],
+      ["account_access", /account.*(?:blocked|not allowed)|requires.*paid|not agreed|unauthorized|forbidden/i],
+      ["capacity", /capacity|too many requests|rate.?limit/i],
+      ["timeout", /timed? ?out|timeout/i],
+    ];
+    failure.providerReason = categories.find(([, pattern]) => pattern.test(message))?.[0] || "unknown";
+    const descriptions = {
+      model_retired: "The AI provider reports that this model has been retired or deprecated.",
+      quota: "The AI provider reports that the account's inference allowance is exhausted.",
+      structured_output: "The AI provider rejected the structured response request.",
+      model_unavailable: "The AI provider cannot find the configured model.",
+      account_access: "The AI provider denied this account access to inference.",
+      capacity: "The AI provider is currently limiting inference requests.",
+      timeout: "The AI provider timed out.",
+    };
+    if (descriptions[failure.providerReason]) failure.message = descriptions[failure.providerReason] + " Direct requests such as 'Chest only' still work. Your loaded workout is unchanged.";
     throw failure;
   } finally {
     clearTimeout(timeout);
