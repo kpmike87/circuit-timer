@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import worker, { validateRequest, validateModelResponse, buildSelectionSlots, selectCatalogWorkout, finalizeSelection } from "../cloudflare-worker/src/index.js";
+import worker, { validateRequest, validateModelResponse, buildSelectionSlots, selectCatalogWorkout, finalizeSelection, parseKnownInstructions } from "../cloudflare-worker/src/index.js";
 import { EXERCISES, getExerciseContext, excludedTags, getAvailableExercises, matchesMuscleGroup } from "../cloudflare-worker/src/exercise-library.js";
 
 const base = { planVersion: 2, durationMinutes: 17, workSeconds: 30, restSeconds: 30,
@@ -140,7 +140,7 @@ test("standard Worker generation does not depend on AI availability and preserve
   assert.equal(body.workout.extraExercises, 1);
   assert.equal(body.model, null);
   assert.equal(body.generationSource, "catalog");
-  assert.equal(body.generatorVersion, "catalog-v1");
+  assert.equal(body.generatorVersion, "catalog-v2");
   assert.equal(calls, 0);
 });
 
@@ -290,7 +290,7 @@ function resolvedInput(body, interpreted) {
   return finalizeSelection(input);
 }
 
-test("exact chest-only example uses one interpretation and overrides a conflicting preset", async () => {
+test("exact chest-only example needs no AI interpretation and overrides a conflicting preset", async () => {
   const body = { ...base, instructions: "Give me one that just focuses on chest" };
   const interpreted = intent({ targetMode: "only", targetMuscles: ["chest"] });
   let calls = 0;
@@ -302,9 +302,9 @@ test("exact chest-only example uses one interpretation and overrides a conflicti
   });
   const response = await worker.fetch(request(body), env);
   assert.equal(response.status, 200);
-  assert.equal(calls, 1);
+  assert.equal(calls, 0);
   const result = await response.json();
-  assert.equal(result.generationSource, "ai-preferences/catalog-selection");
+  assert.equal(result.generationSource, "parsed-preferences/catalog-selection");
   const plan = result.workout;
   assert.equal(plan.exercises.length, 2);
   assert.ok(plan.exercises.every((item) => item.muscles[0] === "Chest"));
@@ -348,7 +348,7 @@ test("semantic exclusions and explicit muscle focus cannot expand equipment or i
   let calls = 0;
   const response = await worker.fetch(request(body), environment(intent({ targetMode: "only", targetMuscles: ["chest"] }), () => { calls++; }));
   assert.equal(response.status, 422);
-  assert.equal(calls, 1);
+  assert.equal(calls, 0);
   const named = { ...base, equipment: ["dumbbells"], instructions: "Include dumbbell curl" };
   const input = resolvedInput(named, intent({ requiredExerciseIds: ["db-curl"] }));
   assert.ok(validateModelResponse(slotSelection(input), input).exercises.some((item) => item.id === "db-curl"));
@@ -380,7 +380,7 @@ test("slow custom interpretation times out once and never substitutes an unrelat
   let calls = 0;
   const env = environment(null);
   env.AI.run = async () => { calls++; return new Promise(() => {}); };
-  const pending = worker.fetch(request({ ...base, instructions: "Chest only" }), env);
+  const pending = worker.fetch(request({ ...base, instructions: "Design a session emphasizing only my chest please" }), env);
   await new Promise(setImmediate);
   t.mock.timers.tick(50_000);
   const response = await pending;
@@ -392,7 +392,7 @@ test("slow custom interpretation times out once and never substitutes an unrelat
 });
 
 test("a malformed custom interpretation is corrected once before catalog selection", async () => {
-  const body = { ...base, instructions: "Give me one that just focuses on chest" };
+  const body = { ...base, instructions: "Design a session emphasizing only my chest please" };
   let calls = 0;
   const env = environment(null);
   env.AI.run = async (_model, options) => {
@@ -512,7 +512,7 @@ test("every catalog ID has one local, accessible SVG with the correct exercise n
     const media = exerciseMedia[exercise.id];
     assert.equal(media.name, exercise.name);
     assert.ok(media.alt.startsWith(`${exercise.name}:`));
-    assert.match(media.src, /^\.\/assets\/exercises\/[a-z0-9-]+\.svg\?v=65$/);
+    assert.match(media.src, /^\.\/assets\/exercises\/[a-z0-9-]+\.svg\?v=66$/);
     const svg = readFileSync(new URL(`../${media.src.split("?")[0]}`, import.meta.url), "utf8");
     assert.ok(svg.includes('<title id="title">') && svg.includes('<desc id="desc">'));
     assert.ok(svg.includes(exercise.name));
@@ -592,7 +592,7 @@ test("offline precache includes the media map and every local exercise picture",
   context.importScripts = () => vm.runInContext(readFileSync(new URL("../exercise-media.js", import.meta.url), "utf8"), context);
   vm.runInContext(readFileSync(new URL("../service-worker.js", import.meta.url), "utf8") + "\nself.testFiles = APP_FILES;", context);
   for (const media of Object.values(exerciseMedia)) assert.ok(context.self.testFiles.includes(media.src));
-  assert.ok(context.self.testFiles.includes("./exercise-media.js?v=65"));
+  assert.ok(context.self.testFiles.includes("./exercise-media.js?v=66"));
   assert.equal(Object.keys(listeners).length, 3);
 });
 
@@ -612,4 +612,144 @@ test("delayed timer ticks advance each elapsed exercise, including when a tick e
   timer.advancePhase(190_000);
   assert.equal(timer.state.phase, "work");
   assert.equal(timer.state.currentExerciseIndex, 3);
+});
+
+test("known text requests run through the real Worker without AI and preserve every restriction", async () => {
+  const cases = [
+    ["Give me one that just focuses on chest", ["chest"]],
+    ["Please focus on chest only", ["chest"]],
+    ["Only chest and back", ["chest", "back"]],
+    ["Back only. No floor.", ["back"]],
+    ["Only glutes; no jumping", ["glutes"]],
+    ["Standing only and no jumping", null],
+    ["No floor, no jumping", null],
+    ["No chest", null],
+    ["Full body with extra chest", null],
+    ["Include knee push-up", null],
+  ];
+  for (const [instructions, targets] of cases) {
+    const response = await worker.fetch(request({ ...base, instructions }), environment(null, () => assert.fail("Unexpected inference")));
+    assert.equal(response.status, 200, instructions);
+    const result = await response.json();
+    assert.equal(result.model, null);
+    assert.equal(result.generationSource, "parsed-preferences/catalog-selection");
+    const plan = result.workout;
+    if (targets) {
+      assert.ok(plan.exercises.every((item) => targets.some((group) => matchesMuscleGroup(item, group))), instructions);
+      for (const group of targets) assert.ok(plan.exercises.some((item) => matchesMuscleGroup(item, group)));
+    }
+    if (/standing|no floor/.test(instructions.toLowerCase()))
+      assert.ok(plan.exercises.every((item) => !EXERCISES.find((entry) => entry.id === item.id).tags.includes("floor")));
+    if (instructions === "No chest") assert.ok(plan.exercises.every((item) => !matchesMuscleGroup(item, "chest")));
+    if (instructions.includes("extra chest")) assert.ok(plan.exercises.filter((item) => matchesMuscleGroup(item, "chest")).length >= 2);
+    if (instructions.includes("knee push-up")) assert.ok(plan.exercises.some((item) => item.id === "bw-knee-push-up"));
+  }
+  for (const instructions of ["Chest only. No floor.", "Biceps only", "Include knee push-up. No push-ups."])
+    assert.equal((await worker.fetch(request({ ...base, instructions }), {})).status, 422, instructions);
+});
+
+test("the local interpreter never discards an unknown qualifier, medical request or conflicting preset", () => {
+  for (const instructions of ["Chest only with no wrist loading", "Chest only. Make it rehab for my injury", "Chest only except push-ups", "Chest only and use a bench", "No floor but include burpees", "Chest only. Back only.", "Upper body with extra chest", "Standing only. Include handstands", "Do not avoid squats"])
+    assert.equal(parseKnownInstructions({ ...base, instructions }), null, instructions);
+});
+
+test("AI failure diagnostics disclose only an allowlisted numeric code and a request reference", async () => {
+  const env = environment(null);
+  env.AI.run = async () => { throw new Error("AiError: 5028: private prompt or provider details"); };
+  const response = await worker.fetch(request({ ...base, instructions: "Design a session emphasizing only my chest please" }), env);
+  const result = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(result.providerCode, "5028");
+  assert.match(result.requestId, /^[a-f0-9-]{36}$/);
+  assert.ok(!JSON.stringify(result).includes("private"));
+});
+
+function builderHarness(fetch) {
+  const element = (value = "") => ({ value, disabled: false, hidden: false, textContent: "", setAttribute() {}, focus() {}, scrollIntoView() {} });
+  const controls = [element(), element(), element()];
+  const context = vm.createContext({
+    state: { running: false, paused: false, generating: false, plan: { title: "Loaded workout" }, previewPlan: null },
+    AI_WORKER_URL: "https://worker.example", AI_REQUEST_TIMEOUT_MS: 60_000,
+    AbortController, Error, TypeError, navigator: { onLine: true }, fetch,
+    window: { setTimeout: () => 1, clearTimeout() {} },
+    aiBuilderForm: { querySelectorAll: () => controls },
+    aiPreview: element(), generateWorkoutButton: element(), aiPreviewTitle: element(),
+    startGenerationStatus() {}, stopGenerationStatus() {}, clearBuilderError() { context.error = ""; },
+    showBuilderError(message) { context.error = message; }, syncNavigationState() {},
+    getBuilderRequest() { return { ...base }; },
+    validateAIPlan: (plan) => plan, renderAIPlan(plan) { context.rendered = plan; },
+    workInput: element("30"), restInput: element("15"), totalDurationInput: element("21"),
+    syncSettingInputWidth() {}, normalizeTotalDuration() {}, returnToReady() { context.ready = true; }, saveSettings() {}, syncAiLoadedBanner() {},
+  });
+  vm.runInContext(appSource.slice(appSource.indexOf("async function generateAIWorkout("), appSource.indexOf("function loadHistory(")), context);
+  context.controls = controls;
+  return context;
+}
+
+test("regeneration locks duplicate submits and keeps the loaded plan until the new preview is explicitly loaded", async () => {
+  let resolve, calls = 0;
+  const ui = builderHarness(() => { calls++; return new Promise((done) => { resolve = done; }); });
+  const loaded = ui.state.plan;
+  const pending = ui.generateAIWorkout({ preventDefault() {} });
+  assert.equal(ui.state.generating, true);
+  assert.equal(ui.aiPreview.hidden, true);
+  assert.ok(ui.controls.every((control) => control.disabled));
+  await ui.generateAIWorkout({ preventDefault() {} });
+  assert.equal(calls, 1);
+  resolve({ ok: true, json: async () => ({ workout: { title: "Second workout", workSeconds: 40, restSeconds: 20, durationMinutes: 15 } }) });
+  await pending;
+  assert.equal(ui.state.plan, loaded);
+  assert.equal(ui.state.previewPlan.title, "Second workout");
+  assert.equal(ui.state.generating, false);
+  assert.ok(ui.controls.every((control) => !control.disabled));
+  ui.loadAIPlanIntoTimer();
+  assert.equal(ui.state.plan.title, "Second workout");
+  assert.equal(ui.workInput.value, "40");
+  assert.equal(ui.ready, true);
+  assert.equal(ui.state.preAiManualSettings.totalDuration, "21");
+  // A subsequent preview and load replace the circuit again, preserving manual settings.
+  ui.state.previewPlan = { title: "Third workout", workSeconds: 30, restSeconds: 30, durationMinutes: 17 };
+  ui.loadAIPlanIntoTimer();
+  assert.equal(ui.state.plan.title, "Third workout");
+  assert.equal(ui.state.preAiManualSettings.totalDuration, "21");
+});
+
+test("failed regeneration removes the draft, restores controls and preserves the loaded workout", async () => {
+  const ui = builderHarness(async () => ({ ok: false, json: async () => ({ error: "Temporarily unavailable", requestId: "ref-123" }) }));
+  const loaded = ui.state.plan;
+  ui.state.previewPlan = { title: "Stale preview" };
+  await ui.generateAIWorkout({ preventDefault() {} });
+  assert.equal(ui.state.plan, loaded);
+  assert.equal(ui.state.previewPlan, null);
+  assert.equal(ui.aiPreview.hidden, true);
+  assert.equal(ui.state.generating, false);
+  assert.equal(ui.generateWorkoutButton.disabled, false);
+  assert.match(ui.error, /ref-123/);
+  ui.loadAIPlanIntoTimer();
+  assert.equal(ui.state.plan, loaded);
+});
+
+test("Reset preserves loaded circuit intervals while the manual timer retains clear-to-zero behavior", () => {
+  for (const loaded of [true, false]) {
+    const ui = builderHarness(async () => {});
+    Object.assign(ui.state, { phase: "idle", currentExerciseIndex: 4 });
+    ui.state.plan = loaded ? { workSeconds: 40, restSeconds: 20, durationMinutes: 17 } : null;
+    ui.updateDisplay = () => {};
+    ui.errorMessage = {};
+    vm.runInContext(appSource.slice(appSource.indexOf("function resetReadyTimers("), appSource.indexOf("function previewWorkTime(")), ui);
+    ui.resetReadyTimers();
+    assert.equal(ui.workInput.value, loaded ? "40" : "0");
+    assert.equal(ui.restInput.value, loaded ? "20" : "0");
+    assert.equal(ui.totalDurationInput.value, loaded ? "17" : "0");
+    assert.equal(ui.state.totalDurationMs, loaded ? 17 * 60_000 : 0);
+    if (loaded) assert.equal(ui.state.currentExerciseIndex, 0);
+  }
+});
+
+test("hidden previews obey the hidden attribute and reopening the builder preserves the text count", () => {
+  assert.match(readFileSync(new URL("../styles.css", import.meta.url), "utf8"), /\[hidden\]\s*\{\s*display: none !important;/);
+  const ui = vm.createContext({ aiInstructions: { value: "Chest only" }, aiInstructionsCount: {}, AI_MAX_INSTRUCTIONS_LENGTH: 240, syncBuilderDurationOptions() {} });
+  vm.runInContext(appSource.slice(appSource.indexOf("function populateBuilder("), appSource.indexOf("function showBuilderError(")), ui);
+  ui.populateBuilder();
+  assert.equal(ui.aiInstructionsCount.textContent, "10 / 240");
 });
